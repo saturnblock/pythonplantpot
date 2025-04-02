@@ -40,9 +40,9 @@ class ADS1115:
 
 test = ADS1115()
 while True:
-test.Feuchtigkeitssensorstatus()
-test.getValue("P3")
-time.sleep(0.5)
+    test.Feuchtigkeitssensorstatus()
+    test.getValue("P3")
+    time.sleep(0.5)
 
 
 
