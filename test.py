@@ -20,7 +20,7 @@ class ADS1115:
         # Create the ADC object using the I2C bus
         self.ads = ADS.ADS1015(self.i2c)
 
-    @staticmethod
+
     def getValue (self, Channel):
         if Channel == "P1":
             readchan = AnalogIn(self.ads, ADS.P1)
@@ -42,7 +42,7 @@ class ADS1115:
 test = ADS1115()
 while True:
     test.Feuchtigkeitssensorstatus()
-    getValue("P3")
+    test.getValue("P3")
     time.sleep(0.5)
 
 
