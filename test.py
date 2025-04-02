@@ -43,7 +43,7 @@ class ADS1115:
     def TankLevel(self):
         offsettanklevel = 2000                  #Offset für Ultraschall Abstand bei vollem Tank ist nicht 26100 sondern weniger
         value = self.getValue("P1")
-        tanklevel = ((value-offsettanklevel)/(26100-offsettanklevel)*100    #TBD what is max value of ADC
+        tanklevel = ((value-offsettanklevel)/(26100-offsettanklevel))*100    #TBD what is max value of ADC
         return tanklevel
 
 class RotaryEncoder:
@@ -53,8 +53,6 @@ class RotaryEncoder:
         self.clockPin = clockPin
         self.dataPin = dataPin
         self.switchPin = switchPin
-        self.rotaryCallback = rotaryCallback
-        self.switchCallback = switchCallback
 
         #setup pins
         GPIO.setup(clockPin, GPIO.IN)
