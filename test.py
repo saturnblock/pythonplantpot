@@ -21,14 +21,15 @@ class ADS1115:
         self.ads = ADS.ADS1015(self.i2c)
 
     @staticmethod
-    def getValue (Channel):
+    def getValue (self, Channel):
         if Channel == "P1":
             readchan = AnalogIn(self.ads, ADS.P1)
             return readchan.value
         elif Channel == "P2":
             readchan = AnalogIn(self.ads, ADS.P2)
             return readchan.value
-        else: return "no valid channel"
+        else:
+            return "no valid channel"
 
         
 
