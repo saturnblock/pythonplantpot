@@ -1,6 +1,6 @@
 import time
 import RPi.GPIO as GPIO
-import adafruit_ads1x15.ads1015 as ADS  # Ensure the Adafruit CircuitPython ADS1x15 library is installed
+import adafruit_ads1x15.ads1115 as ADS  # Ensure the Adafruit CircuitPython ADS1x15 library is installed
 import board
 import busio
 from adafruit_ads1x15.analog_in import AnalogIn
@@ -15,7 +15,7 @@ class ADS1115:
         # Create the I2C bus
         self.i2c = busio.I2C(board.SCL, board.SDA)
         # Create the ADC object using the I2C bus
-        self.ads = ADS.ADS1015(self.i2c)
+        self.ads = ADS.ADS1115(self.i2c)
 
 
     def getValue (self, Channel):
