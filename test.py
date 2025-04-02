@@ -34,7 +34,7 @@ class ADS1115:
         
 
     def Feuchtigkeitssensorstatus(self):
-        Value = getValue("P1")
+        Value = self.getValue("P1")
         return print(Value)
 
 
