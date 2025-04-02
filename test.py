@@ -21,7 +21,7 @@ class ADS1115:
         self.ads = ADS.ADS1015(self.i2c)
 
     @staticmethod
-    def getValue (self, Channel):
+    def getValue (Channel):
         if Channel == "P1":
             readchan = AnalogIn(self.ads, ADS.P1)
             return readchan.value
