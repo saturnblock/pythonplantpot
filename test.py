@@ -88,8 +88,7 @@ class RotaryEncoder:
             else:
                 menucontrol.GoLeft()
         else:
-            #print("else bei Clockcallback")
-            pass
+            print("else bei Clockcallback")
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
@@ -101,13 +100,11 @@ class MenuControls:
 
 
     def GoLeft(self):
-        pass
-        #print("left")
+        print("left")
 
 
     def GoRight(self):
-        pass
-        #print("right")
+        print("right")
 
 
     def Confirm(self):
@@ -130,15 +127,15 @@ if __name__ == "__main__":
         while True:
             #moisturelevel = test.MoistureSensorStatus()
             #print(moisturelevel)
-            print(GPIO.input(13),"switch")
-            print(GPIO.input(5),"clock")
-            print(GPIO.input(6),"data")
-            print("\n")
-            time.sleep(0.1)
-    #try:
-        #while True:
-            #test.MoistureSensorStatus()
+            #print(GPIO.input(13),"switch")
+            #print(GPIO.input(5),"clock")
+            #print(GPIO.input(6),"data")
+            #print("\n")
             #time.sleep(0.1)
+    try:
+        while True:
+            test.MoistureSensorStatus()
+            time.sleep(0.1)
 
     finally:
         GPIO.cleanup()
