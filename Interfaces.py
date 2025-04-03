@@ -9,7 +9,7 @@ import board
 import busio
 from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_blinka.microcontroller.allwinner.h618.pin import find_gpiochip_number
-from main import menucontrol
+from main import menucontrol, wateringamount, pumptimeoneml, tankvolume, prewatercheck
 
 
 class ADS1115:
@@ -38,16 +38,20 @@ class ADS1115:
             return "no valid channel"
 
 
-    def MoistureSensorStatus(self):
+    def MoistureSensorStatus(self): #Returns the Moisture of the Soil in % as Integer
         value = self.getValue("P0")             #Feuchtigkeitssensor ist an Channel 0 des ADS1115 angeschlossen
         moisturelevel = math.floor((value/26500)*100)       #TBD what is max value of ADC
         return moisturelevel
 
-    def TankLevel(self):
+    def TankLevel(self):    #Returns the Level of the Water Tank in % as Integer
         offsettanklevel = 2000                  #Offset für Ultraschall Abstand bei vollem Tank ist nicht 26100 sondern weniger
         value = self.getValue("P1")
-        tanklevel = ((value-offsettanklevel)/(26100-offsettanklevel))*100    #TBD what is max value of ADC
+        tanklevel = math.floor(((value/26500)*100))    #TBD what is max value of ADC
         return tanklevel
+
+    def TankLevelMl(self):  #Returns the remaining Tank Volume in Ml
+        tanklevelml = (self.TankLevel()/100)*tankvolume
+        return tanklevelml
 
 class RotaryEncoder:
     def __init__(self, clockPin = 5, dataPin = 6, switchPin = 13):
@@ -124,50 +128,66 @@ class MenuControls:
     def Confirm(self):
         print("confirm")
 
-class PumpControls:
-    def __init__(self, PumpPin = 21):
+class Pump:
+    def __init__(self, pumpPin = 21):
         GPIO.setwarnings(False) #no warnings, when pins are used for other programs
         GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
-        self.PumpPin = PumpPin
+        self.pumpPin = pumpPin
 
-    def startPump(self):
-        GPIO.output(self.PumpPin, 1)
+    def PumpTimer(self):
+        GPIO.output(self.pumpPin, 1)
+        time.sleep(wateringamount*pumptimeoneml)
+        GPIO.output(self.pumpPin, 0)
 
-if __name__ == "__main__":
+    def StartPumpAutomatic(self):
+        if prewatercheck.WaterTank() and prewatercheck.MoistureSensor() == True:
+            threading.Thread(target=self.PumpTimer(), daemon=True).start()
+        else:
+            print("automatic Watering cannot be started, because water tank is empty or soil is too moist")
 
-    try:
-        test = ADS1115()
-        GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
+    def StartPumpManual(self):
+        GPIO.output(self.pumpPin, 1)
 
-        GPIO.setup(21, GPIO.OUT)
-        GPIO.output(21, 1)
-        while True:
-            print("low")
-            GPIO.output(21, 0)
-            time.sleep(5)
-            print("low")
-            GPIO.output(21, 1)
-            time.sleep(5)
-        # menucontrol = MenuControls()
-        # encoder = RotaryEncoder(5,6,13)
-        # encoder.StartThread()
+    def StopPumpManual(self):
+        GPIO.output(self.pumpPin, 0)
 
-        # test.MoistureSensorStatus()
-        #
-        # test.getValue("P3")
-        # while True:
-        #     moisturelevel = test.MoistureSensorStatus()
-        #     print(moisturelevel)
-        #     #print(GPIO.input(13),"switch")
-        #     #print(GPIO.input(5),"clock")
-        #     #print(GPIO.input(6),"data")
-        #     #print("\n")
-        #     time.sleep(0.1)
-    #try:
-        #while True:
-            #test.MoistureSensorStatus()
-            #time.sleep(0.1)
 
-    finally:
-        GPIO.cleanup()
-        encoder.StopThread()
+
+# if __name__ == "__main__":
+#
+#     try:
+#         test = ADS1115()
+#         GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
+#
+#         GPIO.setup(21, GPIO.OUT)
+#         GPIO.output(21, 1)
+#         while True:
+#             print("low")
+#             GPIO.output(21, 0)
+#             time.sleep(5)
+#             print("low")
+#             GPIO.output(21, 1)
+#             time.sleep(5)
+#         # menucontrol = MenuControls()
+#         # encoder = RotaryEncoder(5,6,13)
+#         # encoder.StartThread()
+#
+#         # test.MoistureSensorStatus()
+#         #
+#         # test.getValue("P3")
+#         # while True:
+#         #     moisturelevel = test.MoistureSensorStatus()
+#         #     print(moisturelevel)
+#         #     #print(GPIO.input(13),"switch")
+#         #     #print(GPIO.input(5),"clock")
+#         #     #print(GPIO.input(6),"data")
+#         #     #print("\n")
+#         #     time.sleep(0.1)
+#     #try:
+#         #while True:
+#             #test.MoistureSensorStatus()
+#             #time.sleep(0.1)
+#
+#     finally:
+#         GPIO.cleanup()
+#         encoder.StopThread()

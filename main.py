@@ -1,11 +1,15 @@
 import json
 from Adafruit_GPIO import GPIO
+
+from Control import PreWateringCheck, WateringControl
 from Interfaces import RotaryEncoder, ADS1115, MenuControls
 
 #set default values for plant pot for the event of missing or corrupted config.json file
-defaulttimer = 100
-defaultwateringamount = 50
-defaultmoisturemax = 30
+defaulttimer = 100 #in s
+defaultwateringamount = 50 #in ml
+defaultmoisturemax = 30 #in %
+pumptimeoneml = 0.4 #in sec time to pump one ml
+tankvolume = 500 #Tankvolume in ml when measured with 100%
 
 #jasonfile config read or write of defaul values if json file is corrupted or missing --> writing of config data into global variables
 def jsonfiledefault():      #if json file was missing this function is used for debugging and notifications
@@ -19,7 +23,7 @@ except:
         data = [{"timer":defaulttimer, "moisturemax":defaultmoisturemax, "wateringamount":defaultwateringamount}]
         json.dump(data, f, indent=4)
         jsonfiledefault()
-timer = data[0]['timer']                    #Global Variable for Timer
+wateringtimer = data[0]['timer']                    #Global Variable for Timer
 wateringamount = data[0]['wateringamount']  #Global Variable for wateringamount
 moisturemax = data[0]['moisturemax']        #Global Variable for moisturemax
 
@@ -29,3 +33,11 @@ GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
 menucontrol = MenuControls()
 encoder = RotaryEncoder()
 encoder.StartThread()
+prewatercheck = PreWateringCheck
+wateringcontrol = WateringControl
+
+
+
+
+if __name__ == '__main__':
+    pass
