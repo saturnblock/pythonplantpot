@@ -90,8 +90,8 @@ class RotaryEncoder:
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
         if self.lock == False:
             self.lock = True
-            if GPIO.input(self.clockPin) == 0:
-                if GPIO.input(self.dataPin) == 1:
+            if
+                if GPIO.i7nput(self.dataPin) == 1:
                     menucontrol.GoRight()
                     threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
                 else:
