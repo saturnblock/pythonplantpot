@@ -130,9 +130,9 @@ if __name__ == "__main__":
         while True:
             #moisturelevel = test.MoistureSensorStatus()
             #print(moisturelevel)
-            print(GPIO.input(13)+"switch")
-            print(GPIO.input(5)+"clock")
-            print(GPIO.input(6)+"data")
+            print(GPIO.input(13),"switch")
+            print(GPIO.input(5),"clock")
+            print(GPIO.input(6),"data")
             time.sleep(0.1)
     #try:
         #while True:
