@@ -81,9 +81,9 @@ class RotaryEncoder:
         GPIO.remove_event_detect(self.switchPin)
 
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
-        datastate = GPIO.input(self.dataPin)
         clockstate = GPIO.input(self.clockPin)
         if clockstate == 0:
+            datastate = GPIO.input(self.dataPin)
             if datastate == 1:
                 menucontrol.GoRight()
             else:
