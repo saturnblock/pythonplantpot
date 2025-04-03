@@ -77,7 +77,7 @@ class RotaryEncoder:
     def timethreadencoderfunc(self):
         time.sleep(0.2)
         self.lock = False
-        print("timethreadencoderfunc: lock is reseted to false")
+        #print("timethreadencoderfunc: lock is reseted to false")
 
     def StartThread(self):
         GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback)
