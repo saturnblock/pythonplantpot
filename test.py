@@ -1,7 +1,5 @@
 import time
-import digitalio
-from adafruit_blinka import patch_system
-patch_system()
+import RPi.GPIO as GPIO
 import adafruit_ads1x15.ads1115 as ADS  # Ensure the Adafruit CircuitPython ADS1x15 library is installed
 import board
 import busio
@@ -50,20 +48,16 @@ class ADS1115:
 
 class RotaryEncoder:
     def __init__(self, clockPin, dataPin, switchPin):
-        self.clockPin = digitalio.DigitalInOut(clockPin)
-        self.clockPin.direction = digitalio.Direction.INPUT
-        self.clockPin.pull = digitalio.Pull.UP
-
-        self.dataPin = digitalio.DigitalInOut(dataPin)
-        self.dataPin.direction = digitalio.Direction.INPUT
-        self.dataPin.pull = digitalio.Pull.UP
-
-        self.switchPin = digitalio.DigitalInOut(switchPin)
-        self.switchPin.direction = digitalio.Direction.INPUT
-        self.switchPin.pull = digitalio.Pull.UP
+        GPIO.setwarnings(False) #no warnings, when pins are used for other programs
+        #persist values
+        self.clockPin = clockPin
+        self.dataPin = dataPin
+        self.switchPin = switchPin
 
         #setup pins
-
+        GPIO.setup(clockPin, GPIO.IN)
+        GPIO.setup(dataPin, GPIO.IN)
+        GPIO.setup(switchPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
         #GPIO.setup(channel, GPIO.IN) set channel as an Input
         #GPIO.setup(channel, GPIO.OUT) set channel as an Output
@@ -77,21 +71,24 @@ class RotaryEncoder:
         #GPIO.cleanup() cleanup to reset all pins that the program has used
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
-
+    def StartThread(self):
+        GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=250)
         GPIO.add_event_detect(self.switchPin, GPIO.FALLING, callback=self._switchCallback, bouncetime=300)
 
+    def StopThread(self):
         GPIO.remove_event_detect(self.clockPin)
         GPIO.remove_event_detect(self.switchPin)
-    def _clockCallback(self):  # whenever a Falling of the Clock pin happened
-        if not self.clockPin.value:
-            if self.dataPin.value:
+
+    def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
+        if GPIO.input(self.clockPin) == 0:
+            data = GPIO.input(self.dataPin)
+            if data == 1:
                 menucontrol.GoLeft()
             else:
                 menucontrol.GoRight()
-                menucontrol.GoRight()
-    def _switchCallback(self):
-        if not self.switchPin.value:
-            menucontrol.Confirm()
+
+    def _switchCallback(self, pin):
+        if GPIO.input(self.switchPin) == 0:
             menucontrol.Confirm()
 
 class MenuControls:
@@ -113,7 +110,7 @@ class MenuControls:
 
 
 if __name__ == "__main__":
-
+    test = ADS1115()
     GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
     menucontrol = MenuControls()
     encoder = RotaryEncoder(5,6,13)
@@ -125,7 +122,7 @@ if __name__ == "__main__":
 
     try:
         while True:
-
+            test.MoistureSensorStatus()
             time.sleep(0.1)
 
     finally:
