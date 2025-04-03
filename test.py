@@ -95,13 +95,13 @@ class RotaryEncoder:
             if GPIO.input(self.clockPin) == 0:
                 if GPIO.input(self.dataPin) == 1:
                     menucontrol.GoRight()
-                    threading.Thread(target=self.timethreadencoderfunc).start()
+                    threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
                 else:
                     menucontrol.GoLeft()
-                    threading.Thread(target=self.timethreadencoderfunc).start()
+                    threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
             else:
                 print("else bei Clockcallback")
-                threading.Thread(target=self.timethreadencoderfunc).start()
+                threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
