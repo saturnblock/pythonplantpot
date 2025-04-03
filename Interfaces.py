@@ -1,13 +1,15 @@
 import threading
 import time
 import math
+from operator import truediv
+
 import RPi.GPIO as GPIO
 import adafruit_ads1x15.ads1115 as ADS  # Ensure the Adafruit CircuitPython ADS1x15 library is installed
 import board
 import busio
 from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_blinka.microcontroller.allwinner.h618.pin import find_gpiochip_number
-
+from main import menucontrol
 
 
 class ADS1115:
@@ -48,8 +50,9 @@ class ADS1115:
         return tanklevel
 
 class RotaryEncoder:
-    def __init__(self, clockPin, dataPin, switchPin):
+    def __init__(self, clockPin = 5, dataPin = 6, switchPin = 13):
         GPIO.setwarnings(False) #no warnings, when pins are used for other programs
+        GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
         #persist values
         self.clockPin = clockPin
         self.dataPin = dataPin
@@ -90,7 +93,7 @@ class RotaryEncoder:
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
         if self.lock == False:
             self.lock = True
-            if
+            if GPIO.input(self.clockPin) == 0:
                 if GPIO.i7nput(self.dataPin) == 1:
                     menucontrol.GoRight()
                     threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
@@ -121,29 +124,35 @@ class MenuControls:
     def Confirm(self):
         print("confirm")
 
+class PumpControls:
+    def __init__(self, PumpPin = 21):
+        GPIO.setwarnings(False) #no warnings, when pins are used for other programs
+        GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
 
 
 if __name__ == "__main__":
 
-    encoder = RotaryEncoder(5,6,13)
     try:
         test = ADS1115()
         GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
-        menucontrol = MenuControls()
-        encoder = RotaryEncoder(5,6,13)
-        encoder.StartThread()
-
-        test.MoistureSensorStatus()
-
-        test.getValue("P3")
         while True:
-            moisturelevel = test.MoistureSensorStatus()
-            print(moisturelevel)
-            #print(GPIO.input(13),"switch")
-            #print(GPIO.input(5),"clock")
-            #print(GPIO.input(6),"data")
-            #print("\n")
-            time.sleep(0.1)
+            GPIO.setup(21, GPIO.OUT)
+            GPIO.output(21, 1)
+        # menucontrol = MenuControls()
+        # encoder = RotaryEncoder(5,6,13)
+        # encoder.StartThread()
+
+        # test.MoistureSensorStatus()
+        #
+        # test.getValue("P3")
+        # while True:
+        #     moisturelevel = test.MoistureSensorStatus()
+        #     print(moisturelevel)
+        #     #print(GPIO.input(13),"switch")
+        #     #print(GPIO.input(5),"clock")
+        #     #print(GPIO.input(6),"data")
+        #     #print("\n")
+        #     time.sleep(0.1)
     #try:
         #while True:
             #test.MoistureSensorStatus()
