@@ -6,9 +6,8 @@ import board
 import busio
 from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_blinka.microcontroller.allwinner.h618.pin import find_gpiochip_number
+from multiprocessing.pool import ThreadPool
 
-def getValue(param):
-    pass
 
 
 class ADS1115:
@@ -56,6 +55,8 @@ class RotaryEncoder:
         self.dataPin = dataPin
         self.switchPin = switchPin
         self.lock = False
+        self.timethreadencoder = ThreadPool(processes=1)
+
 
         #setup pins
         GPIO.setup(clockPin, GPIO.IN)
@@ -74,6 +75,10 @@ class RotaryEncoder:
         #GPIO.cleanup() cleanup to reset all pins that the program has used
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
+    def timethreadencoderfunc(self, testtime):
+        time.sleep(1)
+        return not self.testtime
+
     def StartThread(self):
         GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback)
         GPIO.add_event_detect(self.switchPin, GPIO.FALLING, callback=self._switchCallback, bouncetime=5)
@@ -88,13 +93,13 @@ class RotaryEncoder:
             if GPIO.input(self.clockPin) == 0:
                 if GPIO.input(self.dataPin) == 1:
                     menucontrol.GoRight()
-                    self.lock = False
+                    self.lock = pool.apply_async(self.timethreadencoderfunc,True)
                 else:
                     menucontrol.GoLeft()
-                    self.lock = False
+                    self.lock = pool.apply_async(self.timethreadencoderfunc,True)
             else:
                 print("else bei Clockcallback")
-                self.lock = False
+                self.lock = pool.apply_async(self.timethreadencoderfunc,True)
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
