@@ -73,7 +73,7 @@ class RotaryEncoder:
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
     def StartThread(self):
-        GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=1)
+        GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=20)
         GPIO.add_event_detect(self.switchPin, GPIO.FALLING, callback=self._switchCallback, bouncetime=5)
 
     def StopThread(self):
@@ -81,20 +81,16 @@ class RotaryEncoder:
         GPIO.remove_event_detect(self.switchPin)
 
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
-        GPIO.remove_event_detect(self.clockPin)
         data = GPIO.input(self.dataPin)
-        #if GPIO.input(self.clockPin) == 0:
-        if data == 1:
-            menucontrol.GoRight()
-            time.sleep(0.2)
-            GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=1)
+        if GPIO.input(self.clockPin) == 0:
+            if data == 1:
+                menucontrol.GoRight()
+                time.sleep(0.2)
+            else:
+                menucontrol.GoLeft()
+                time.sleep(0.2)
         else:
-            menucontrol.GoLeft()
-            time.sleep(0.2)
-            GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=1)
-
-        #else:
-            #print("else bei Clockcallback")
+            print("else bei Clockcallback")
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
