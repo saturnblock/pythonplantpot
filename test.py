@@ -79,6 +79,7 @@ class RotaryEncoder:
     def timethreadencoderfunc(self, testtime):
         time.sleep(testtime)
         self.lock = False
+        print("timethreadencoderfunc: lock is reseted to false")
         return
 
     def StartThread(self):
