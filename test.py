@@ -78,8 +78,8 @@ class RotaryEncoder:
 
     def timethreadencoderfunc(self, testtime):
         time.sleep(testtime)
-        lock = False
-        return lock
+        self.lock = False
+        return
 
     def StartThread(self):
         GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback)
@@ -95,15 +95,15 @@ class RotaryEncoder:
             if GPIO.input(self.clockPin) == 0:
                 if GPIO.input(self.dataPin) == 1:
                     menucontrol.GoRight()
-                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
+                    self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                     print(self.lock)
                 else:
                     menucontrol.GoLeft()
-                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
+                    self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                     print(self.lock)
             else:
                 print("else bei Clockcallback")
-                self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
+                self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                 print(self.lock)
 
     def _switchCallback(self, pin):
