@@ -109,22 +109,25 @@ class MenuControls:
 
 
 
-if __name__ == "__main__":
-    test = ADS1115()
-    GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
-    menucontrol = MenuControls()
-    encoder = RotaryEncoder(5,6,13)
-    encoder.StartThread()
+#if __name__ == "__main__":
+test = ADS1115()
+    #GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
+    #menucontrol = MenuControls()
+    #encoder = RotaryEncoder(5,6,13)
+    #encoder.StartThread()
 
-    test.MoistureSensorStatus()
+    #test.MoistureSensorStatus()
 
-    test.getValue("P3")
+    #test.getValue("P3")
+while True:
+    moisturelevel = test.MoistureSensorStatus()
+    print(moisturelevel)
+    time.sleep(0.1)
+    #try:
+        #while True:
+            #test.MoistureSensorStatus()
+            #time.sleep(0.1)
 
-    try:
-        while True:
-            test.MoistureSensorStatus()
-            time.sleep(0.1)
-
-    finally:
-        GPIO.cleanup()
-        encoder.stopThread()
+    #finally:
+        #GPIO.cleanup()
+        #encoder.stopThread()
