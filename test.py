@@ -19,6 +19,7 @@ class ADS1115:
         self.ads = ADS.ADS1115(self.i2c)
 
 
+
     def getValue (self, Channel):
         if Channel == "P0":                         #Feuchtigkeitssensor ist an Channel 0 des ADS1115 angeschlossen
             readchan = AnalogIn(self.ads, ADS.P0)
@@ -54,6 +55,7 @@ class RotaryEncoder:
         self.clockPin = clockPin
         self.dataPin = dataPin
         self.switchPin = switchPin
+        self.lock = False
 
         #setup pins
         GPIO.setup(clockPin, GPIO.IN)
@@ -81,13 +83,18 @@ class RotaryEncoder:
         GPIO.remove_event_detect(self.switchPin)
 
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
-        if GPIO.input(self.clockPin) == 0:
-            if GPIO.input(self.dataPin) == 1:
-                menucontrol.GoRight()
+        if self.lock == False:
+            self.lock = True
+            if GPIO.input(self.clockPin) == 0:
+                if GPIO.input(self.dataPin) == 1:
+                    menucontrol.GoRight()
+                    self.lock = False
+                else:
+                    menucontrol.GoLeft()
+                    self.lock = False
             else:
-                menucontrol.GoLeft()
-        else:
-            print("else bei Clockcallback")
+                print("else bei Clockcallback")
+                self.lock = False
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
