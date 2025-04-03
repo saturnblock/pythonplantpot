@@ -89,7 +89,8 @@ class RotaryEncoder:
                 menucontrol.GoLeft()
                 time.sleep(0.2)
         else:
-            print("else bei Clockcallback")
+            #print("else bei Clockcallback")
+            pass
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
@@ -133,6 +134,7 @@ if __name__ == "__main__":
             print(GPIO.input(13),"switch")
             print(GPIO.input(5),"clock")
             print(GPIO.input(6),"data")
+            print("\n")
             time.sleep(0.1)
     #try:
         #while True:
