@@ -54,7 +54,6 @@ class RotaryEncoder:
         self.clockPin = clockPin
         self.dataPin = dataPin
         self.switchPin = switchPin
-        self.lock = False
 
         #setup pins
         GPIO.setup(clockPin, GPIO.IN)
@@ -82,19 +81,14 @@ class RotaryEncoder:
         GPIO.remove_event_detect(self.switchPin)
 
     def _clockCallback(self, pin):  #whenever a Falling of the Clock pin happened
-        if self.lock == True:
-            return
-        self.lock = True
         data = GPIO.input(self.dataPin)
-        clockPinState = 0
-        if clockPinState == 0:
-            if data == 1:
-                menucontrol.GoRight()
-            else:
-                menucontrol.GoLeft()
+        #if GPIO.input(self.clockPin) == 0:
+        if data == 1:
+            menucontrol.GoRight()
         else:
-            print("else bei Clockcallback")
-        self.lock = False
+            menucontrol.GoLeft()
+        #else:
+            #print("else bei Clockcallback")
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
