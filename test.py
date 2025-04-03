@@ -1,3 +1,4 @@
+import threading
 import time
 import math
 import RPi.GPIO as GPIO
@@ -6,7 +7,6 @@ import board
 import busio
 from adafruit_ads1x15.analog_in import AnalogIn
 from adafruit_blinka.microcontroller.allwinner.h618.pin import find_gpiochip_number
-from threading
 
 
 
@@ -99,10 +99,10 @@ class RotaryEncoder:
                     threading.Thread(target=self.timethreadencoderfunc).start()
                 else:
                     menucontrol.GoLeft()
-
+                    threading.Thread(target=self.timethreadencoderfunc).start()
             else:
                 print("else bei Clockcallback")
-
+                threading.Thread(target=self.timethreadencoderfunc).start()
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
