@@ -128,9 +128,10 @@ class PumpControls:
     def __init__(self, PumpPin = 21):
         GPIO.setwarnings(False) #no warnings, when pins are used for other programs
         GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
+        self.PumpPin = PumpPin
 
-    def startPump(selfs):
-
+    def startPump(self):
+        GPIO.output(self.PumpPin, 1)
 
 if __name__ == "__main__":
 
