@@ -1,4 +1,5 @@
 import time
+import math
 import RPi.GPIO as GPIO
 import adafruit_ads1x15.ads1115 as ADS  # Ensure the Adafruit CircuitPython ADS1x15 library is installed
 import board
@@ -37,7 +38,7 @@ class ADS1115:
 
     def MoistureSensorStatus(self):
         value = self.getValue("P0")             #Feuchtigkeitssensor ist an Channel 0 des ADS1115 angeschlossen
-        moisturelevel = (value/26100)*100       #TBD what is max value of ADC
+        moisturelevel = math.floor((value/26500)*100)       #TBD what is max value of ADC
         return moisturelevel
 
     def TankLevel(self):
