@@ -85,12 +85,8 @@ class RotaryEncoder:
         if GPIO.input(self.clockPin) == 0:
             if GPIO.input(self.dataPin) == 1:
                 menucontrol.GoRight()
-                time.sleep(0.1)
-                self.StartThread()
             else:
                 menucontrol.GoLeft()
-                time.sleep(0.1)
-                self.StartThread()
         else:
             print("else bei Clockcallback")
 
