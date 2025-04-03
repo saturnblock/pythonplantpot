@@ -93,6 +93,7 @@ class RotaryEncoder:
                 GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=1)
         else:
             GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=1)
+            print("else bei Clockcallback")
 
     def _switchCallback(self, pin):
         if GPIO.input(self.switchPin) == 0:
