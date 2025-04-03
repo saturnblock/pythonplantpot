@@ -125,17 +125,17 @@ if __name__ == "__main__":
 
         test.getValue("P3")
         while True:
-            #moisturelevel = test.MoistureSensorStatus()
-            #print(moisturelevel)
+            moisturelevel = test.MoistureSensorStatus()
+            print(moisturelevel)
             #print(GPIO.input(13),"switch")
             #print(GPIO.input(5),"clock")
             #print(GPIO.input(6),"data")
             #print("\n")
-            #time.sleep(0.1)
-    try:
-        while True:
-            test.MoistureSensorStatus()
             time.sleep(0.1)
+    #try:
+        #while True:
+            #test.MoistureSensorStatus()
+            #time.sleep(0.1)
 
     finally:
         GPIO.cleanup()
