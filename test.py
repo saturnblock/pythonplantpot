@@ -101,11 +101,13 @@ class MenuControls:
 
 
     def GoLeft(self):
-        print("left")
+        pass
+        #print("left")
 
 
     def GoRight(self):
-        print("right")
+        pass
+        #print("right")
 
 
     def Confirm(self):
