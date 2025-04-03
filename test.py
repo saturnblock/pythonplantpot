@@ -127,6 +127,7 @@ class MenuControls:
 
 if __name__ == "__main__":
 
+    encoder = None
     try:
         test = ADS1115()
         GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
