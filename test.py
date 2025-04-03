@@ -77,8 +77,9 @@ class RotaryEncoder:
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
     def timethreadencoderfunc(self, testtime):
-        time.sleep(1)
-        return not self.testtime
+        time.sleep(testtime)
+        lock = False
+        return lock
 
     def StartThread(self):
         GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback)
@@ -94,18 +95,15 @@ class RotaryEncoder:
             if GPIO.input(self.clockPin) == 0:
                 if GPIO.input(self.dataPin) == 1:
                     menucontrol.GoRight()
-                    self.testtime = True
-                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,self.testtime)
+                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                     print(self.lock)
                 else:
                     menucontrol.GoLeft()
-                    self.testtime = True
-                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,self.testtime)
+                    self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                     print(self.lock)
             else:
                 print("else bei Clockcallback")
-                self.testtime = True
-                self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,self.testtime)
+                self.lock = self.timethreadencoder.apply_async(self.timethreadencoderfunc,1)
                 print(self.lock)
 
     def _switchCallback(self, pin):
