@@ -129,15 +129,24 @@ class PumpControls:
         GPIO.setwarnings(False) #no warnings, when pins are used for other programs
         GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
 
+    def startPump(selfs):
+
 
 if __name__ == "__main__":
 
     try:
         test = ADS1115()
         GPIO.setmode(GPIO.BCM)    #set Board Pin layout BCM for Broadcom layout
+
+        GPIO.setup(21, GPIO.OUT)
+        GPIO.output(21, 1)
         while True:
-            GPIO.setup(21, GPIO.OUT)
+            print("low")
+            GPIO.output(21, 0)
+            time.sleep(5)
+            print("low")
             GPIO.output(21, 1)
+            time.sleep(5)
         # menucontrol = MenuControls()
         # encoder = RotaryEncoder(5,6,13)
         # encoder.StartThread()
