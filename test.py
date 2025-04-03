@@ -55,8 +55,6 @@ class RotaryEncoder:
         self.dataPin = dataPin
         self.switchPin = switchPin
         self.lock = False
-        self.timethreadencoder = ThreadPool(processes=1)
-        self.testtime = True
 
 
         #setup pins
