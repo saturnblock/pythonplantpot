@@ -6,26 +6,28 @@ from Interfaces import Pump
 from main import wateringtimer, ads1115, wateringamount, moisturemax
 
 
-class WateringControl:
+class WateringControl:  #Main Control the watering of the plant
     def __init__(self):
         pass
 
-    def WateringTimer(self):
-        timer = wateringtimer
-        while timer >= 0:
+    def StartWateringTimer(self):   #Timer between watering processes
+        timer = wateringtimer       #set timer according to global wateringtimer variable
+        while timer >= 0:           #timer loop
             time.sleep(1)
             timer -= 1
-        Pump.StartPumpAutomatic()
+        Pump.StartPumpAutomatic()   #Start automatic pump function with prechecks
+        self.StartWateringTimer()   #selfrestart the timer after watering
 
-class PreWateringCheck:
+
+class PreWateringCheck: #Precheck class to check before automatic watering
     def __init__(self):
         pass
 
-    def WaterTank(self):
+    def WaterTank(self):    #precheck water tank level if enough water is remaining in tank
         if ads1115.TankLevelMl() >= wateringamount:
             return True
 
-    def MoistureSensor(self):
+    def MoistureSensor(self):   #precheck if the soil is dry enough for another watering process
         if ads1115.MoistureSensorStatus() >= moisturemax:
             return True
 

@@ -2,6 +2,7 @@
     {
         "timer": 999,
         "moisturemax": 999,
-        "wateringamount": 999
+        "wateringamount": 999,
+        "moisturesensoruse": 1,
     }
 ]
