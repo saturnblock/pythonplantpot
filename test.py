@@ -75,7 +75,7 @@ class RotaryEncoder:
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
     def timethreadencoderfunc(self):
-        time.sleep(1)
+        time.sleep(0.2)
         self.lock = False
         print("timethreadencoderfunc: lock is reseted to false")
 
