@@ -18,7 +18,7 @@ class ADS1115:  #ADC from Adafruit ADS1115 for analog sensor use with raspberryP
         # Create the ADC object using the I2C bus
         self.ads = ADS.ADS1115(self.i2c)
 
-    def getValue (self, Channel):
+    def get_value (self, Channel):
         if Channel == "P0":                         #Moisturesensor is attached to Channel 0 on ADS1115 and is interfaced with P0
             readchan = AnalogIn(self.ads, ADS.P0)
             return readchan.value
@@ -34,18 +34,18 @@ class ADS1115:  #ADC from Adafruit ADS1115 for analog sensor use with raspberryP
         else:
             return "no valid channel"
 
-    def MoistureSensorStatus(self): #Returns the Moisture of the Soil in % as Integer
-        value = self.getValue("P0")             #FMoisturesensor is attached to Channel 0
+    def moisture_sensor_status(self): #Returns the Moisture of the Soil in % as Integer
+        value = self.get_value("P0")             #FMoisturesensor is attached to Channel 0
         moisturelevel = math.floor((value/26500)*100)
         return moisturelevel
 
-    def TankLevel(self):    #Returns the Level of the Water Tank in % as Integer
-        value = self.getValue("P1")
+    def tank_level(self):    #Returns the Level of the Water Tank in % as Integer
+        value = self.get_value("P1")
         tanklevel = math.floor(((value/26500)*100))
         return tanklevel
 
-    def TankLevelMl(self):  #Returns the remaining Tank Volume in Ml
-        tanklevelml = (self.TankLevel()/100)*tankvolume
+    def tank_level_ml(self):  #Returns the remaining Tank Volume in Ml
+        tanklevelml = (self.tank_level() / 100) * tankvolume
         return tanklevelml
 
 
@@ -77,48 +77,48 @@ class RotaryEncoder:    #Rotary Encoder from AzDelivery KY-040 to interface with
         #GPIO.cleanup() cleanup to reset all pins that the program has used
         #GPIO.add_event_detect(channel,GPIO.FALLING,callback=self._clockCallback,bouncetime=250) detect when pin falls .RISING for rising, then do this callback function, warte bevor man wieder auf eine änderung hört in ms
 
-    def timethreadencoderfunc(self):    #Function for threaded timer to unlock the _clockCallback function delayed by a timer
+    def time_thread_encoder_func(self):    #Function for threaded timer to unlock the _clockCallback function delayed by a timer
         time.sleep(0.2)
         self.lock = False
 
-    def StartThread(self):  #Function to start threads to look for falling signals on both clock and switch Pin to register a turn or press of the encoder
-        GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback)
-        GPIO.add_event_detect(self.switchPin, GPIO.FALLING, callback=self._switchCallback, bouncetime=5)
+    def start_thread(self):  #Function to start threads to look for falling signals on both clock and switch Pin to register a turn or press of the encoder
+        GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clock_callback)
+        GPIO.add_event_detect(self.switchPin, GPIO.FALLING, callback=self._switch_callback, bouncetime=5)
 
-    def StopThread(self):   #Function to stop threads
+    def stop_thread(self):   #Function to stop threads
         GPIO.remove_event_detect(self.clockPin)
         GPIO.remove_event_detect(self.switchPin)
 
-    def _clockCallback(self, pin):  #whenever a Falling of the Clock pin is detected this function is called to determine the direction
+    def _clock_callback(self, pin):  #whenever a Falling of the Clock pin is detected this function is called to determine the direction
         if self.lock == False:
             self.lock = True
             if GPIO.input(self.clockPin) == 0:
                 if GPIO.input(self.dataPin) == 1:   #if clock pin is 0 and data pin is 1 it was turned right
-                    menucontrol.GoRight()
-                    threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
+                    menucontrol.go_right()
+                    timethreadencoder = threading.Thread(target=self.time_thread_encoder_func, daemon=True).start()
                 else:                               #if clock and data pin are 0 it was turned left
-                    menucontrol.GoLeft()
-                    threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
+                    menucontrol.go_left()
+                    timethreadencoder = threading.Thread(target=self.time_thread_encoder_func, daemon=True).start()
             else:                                   #if clock pin is 1 a false reading happend
                 print("else bei Clockcallback")
-                threading.Thread(target=self.timethreadencoderfunc, daemon=True).start()
+                timethreadencoder = threading.Thread(target=self.time_thread_encoder_func, daemon=True).start()
 
-    def _switchCallback(self, pin): #whenever a falling of the switch pin is detected this function is called to register a press
+    def _switch_callback(self, pin): #whenever a falling of the switch pin is detected this function is called to register a press
         if GPIO.input(self.switchPin) == 0:
-            menucontrol.Confirm()
+            menucontrol.confirm()
 
 
 class MenuControls: #Class for Menu Controls to navigate the menu
     def __init__(self):
         pass
 
-    def GoLeft(self):   #function is called when encoder was turned left
+    def go_left(self):   #function is called when encoder was turned left
         print("left")
 
-    def GoRight(self):  #function is called when encoder was turned right
+    def go_right(self):  #function is called when encoder was turned right
         print("right")
 
-    def Confirm(self):  #function is called when encoder was pressed
+    def confirm(self):  #function is called when encoder was pressed
         print("confirm")
 
 
@@ -128,21 +128,21 @@ class Pump: #12V pipe Pump
         GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
         self.pumpPin = pumpPin
 
-    def PumpTimer(self):    #PumpTimer function called when Pump is started automatically with the StartPumpAutomatic function
+    def pump_timer(self):    #PumpTimer function called when Pump is started automatically with the StartPumpAutomatic function
         GPIO.output(self.pumpPin, 1)    #set Output of Pump Pin to High
         time.sleep(wateringamount*pumptimeoneml)    #Wait for the amount of time needed to pump the wanted amount of water from global wateringamount variable
         GPIO.output(self.pumpPin, 0)    #set Output of Pump Pin to Low
 
-    def StartPumpAutomatic(self):   #Automatic Pump start to water the wateringamount from global variable
-        if prewatercheck.WaterTank() and prewatercheck.MoistureSensor() == True:    #Check the prewaterchecks before starting to pump
-            threading.Thread(target=self.PumpTimer(), daemon=True).start()  #start the PumpTimer function as a thread to not interrupt the programm
+    def start_pump_automatic(self):   #Automatic Pump start to water the wateringamount from global variable
+        if prewatercheck.water_tank() and prewatercheck.moisture_sensor() == True:    #Check the prewaterchecks before starting to pump
+            threading.Thread(target=self.pump_timer(), daemon=True).start()  #start the PumpTimer function as a thread to not interrupt the programm
         else:
             print("automatic Watering cannot be started, because water tank is empty or soil is too moist") #Debug
 
-    def StartPumpManual(self):  #Allows for manual start of the pump
+    def start_pump_manual(self):  #Allows for manual start of the pump
         GPIO.output(self.pumpPin, 1)
 
-    def StopPumpManual(self):   #Allows for manual stopping of the pump
+    def stop_pump_manual(self):   #Allows for manual stopping of the pump
         GPIO.output(self.pumpPin, 0)
 
 

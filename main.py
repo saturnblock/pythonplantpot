@@ -2,6 +2,7 @@ import json
 from Adafruit_GPIO import GPIO
 import Control
 from Interfaces import RotaryEncoder, ADS1115, MenuControls
+from Menu import Menu
 
 #set default values for plant pot for the event of missing or corrupted config.json file
 defaultwateringtimer = 100 #in s
@@ -18,7 +19,7 @@ moisturemax = defaultmoisturemax
 moisturesensoruse = defaultmoisturesensoruse
 
 #jasonfile config read or write of default values if json file is corrupted or missing --> writing of config data into global variables
-def jsonfiledefault():      #if json file was missing this function is used for debugging and notifications
+def json_file_default():      #if json file was missing this function is used for debugging and notifications
     print("config file was empty or missing, default values were added")
 try:                                        #opening json file conifg.json to read all content and write it to data for later extraction
     with open('config.json', 'r') as f:
@@ -28,7 +29,7 @@ except:
     with open('config.json', 'w+') as f:    #if json file is empty or missing a new file is created and default values are added
         data = [{"timer":defaultwateringtimer, "moisturemax":defaultmoisturemax, "wateringamount":defaultwateringamount, "moisturesensoruse":defaultmoisturesensoruse}]
         json.dump(data, f, indent=4)
-        jsonfiledefault()
+        json_file_default()
 wateringtimer = data[0]['timer']                    #Global Variable for Timer
 wateringamount = data[0]['wateringamount']          #Global Variable for wateringamount
 moisturemax = data[0]['moisturemax']                #Global Variable for moisturemax
@@ -37,8 +38,9 @@ moisturesensoruse = data[0]['moisturesensoruse']    #Global Variable fo moisture
 #initialize ADS, encoder, PreWateringCheck and WateringControl Object and Start Thread for the encoder to interupt when Encoder is used
 ads1115 = ADS1115()
 menucontrol = MenuControls()
+menu = Menu()
 encoder = RotaryEncoder()
-encoder.StartThread()
+encoder.start_thread()
 prewatercheck = Control.PreWateringCheck()
 wateringcontrol = Control.WateringControl()
 
@@ -49,4 +51,4 @@ try:
     pass
 finally:
     GPIO.cleanup()
-    encoder.StopThread()
+    encoder.stop_thread()
