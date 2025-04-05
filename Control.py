@@ -32,6 +32,7 @@ class WateringControl:  #Main Control the watering of the plant
         self._stop_thread = True #set the stop variable of timer thread to True to catch at if statement
 
 
+
 class PreWateringCheck: #Precheck class to check before automatic watering
     def __init__(self):
         pass

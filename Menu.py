@@ -29,6 +29,6 @@ class Menu: #Menu class for Menu configuration
 
     def confirm_start(self):   #user needs to confirm the start of the automatic program
         #setup that the user needs to confirm the start of the programm
-        if user.input.confirmed == 1
+        if input("Do you want to start the programm? (y/n)") == "y":
             self.confirmation_start = True
             return self.confirmation_start

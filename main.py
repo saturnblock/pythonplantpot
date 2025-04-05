@@ -1,7 +1,8 @@
 import json
-from Adafruit_GPIO import GPIO
+import time
+import RPi.GPIO as GPIO
 import Control
-from Interfaces import RotaryEncoder, ADS1115, MenuControls
+from Interfaces import RotaryEncoder, ADS1115, MenuControls, Pump
 from Menu import Menu
 
 #set default values for plant pot for the event of missing or corrupted config.json file
@@ -41,14 +42,40 @@ menucontrol = MenuControls()
 menu = Menu()
 encoder = RotaryEncoder()
 encoder.start_thread()
+pump = Pump
 prewatercheck = Control.PreWateringCheck()
 wateringcontrol = Control.WateringControl()
 
 
 
+
+
 #main part of file
 try:
-    pass
+    print("This is the Value of Channel 0 of the adc ADS1115 (normally Moisture Sensor) in %:\n")
+    ads1115.moisture_sensor_status()
+    time.sleep(1)
+    print("This is the value of Channel 1 of the adc ADS1115 (normally Water Tank Sensor) in ml:\n")
+    ads1115.tank_level_ml()
+    time.sleep(1)
+    print("Test now the function of the Encoder by twisting and pushing and end test with enter")
+    input()
+    print("Now test the Pump switch output it will oscillate between high and low. End Test with enter")
+    time.sleep(1)
+    while not input():
+        print("Switch On / High 3.3V")
+        pump.start_pump_manual()
+        time.sleep(2)
+        print("Switch Off / Low 0V. To end test press enter")
+        pump.stop_pump_manual()
+    print("now test the automatic watering control function")
+    time.sleep(1)
+    wateringcontrol.start()
+    time.sleep(10)
+    wateringcontrol.stop()
+
+
+
 finally:
     GPIO.cleanup()
     encoder.stop_thread()
