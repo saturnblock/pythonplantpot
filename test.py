@@ -39,7 +39,7 @@ class Pump: #12V pipe Pump
 
 
 try:
-    pump = Pump
+    pump = Pump()
     while True:
         print("Switch On / High 3.3V")
         pump.start_pump_manual()
