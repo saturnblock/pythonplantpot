@@ -2,7 +2,7 @@ import json
 import time
 import RPi.GPIO as GPIO
 import Control
-from Interfaces import RotaryEncoder, ADS1115, MenuControls, Pump
+from Interfaces import ADS1115, MenuControls, Pump#, RotaryEncoder
 from Menu import Menu
 
 #set default values for plant pot for the event of missing or corrupted config.json file
