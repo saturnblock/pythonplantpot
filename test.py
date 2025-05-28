@@ -19,6 +19,7 @@ class Pump: #12V pipe Pump
         GPIO.setwarnings(False) #no warnings, when pins are used for other programs
         GPIO.setmode(GPIO.BCM) #set Board Pin layout BCM for Broadcom layout
         self.pumpPin = pumpPin
+        GPIO.setup(pumpPin, GPIO.OUT)
 
     def pump_timer(self):    #PumpTimer function called when Pump is started automatically with the StartPumpAutomatic function
         GPIO.output(self.pumpPin, 1)    #set Output of Pump Pin to High
