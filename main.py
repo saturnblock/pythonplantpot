@@ -40,8 +40,8 @@ moisturesensoruse = data[0]['moisturesensoruse']    #Global Variable fo moisture
 ads1115 = ADS1115()
 menucontrol = MenuControls()
 menu = Menu()
-encoder = RotaryEncoder()
-encoder.start_thread()
+#encoder = RotaryEncoder()
+#encoder.start_thread()
 pump = Pump
 prewatercheck = Control.PreWateringCheck()
 wateringcontrol = Control.WateringControl()
