@@ -2,7 +2,7 @@ import json
 import time
 import RPi.GPIO as GPIO
 import Control
-from Menu import Menu
+#from Menu import Menu
 import threading
 import time
 import math
