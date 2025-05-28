@@ -68,11 +68,11 @@ try:
         time.sleep(2)
         print("Switch Off / Low 0V. To end test press enter")
         pump.stop_pump_manual()
-    print("now test the automatic watering control function")
+    #print("now test the automatic watering control function")
     time.sleep(1)
-    wateringcontrol.start()
-    time.sleep(10)
-    wateringcontrol.stop()
+    #wateringcontrol.start()
+    #time.sleep(10)
+    #wateringcontrol.stop()
 
 
 
