@@ -41,11 +41,12 @@ class Pump: #12V pipe Pump
 
 try:
     pump = Pump()
-    #while True:
-    print("Switch On / High 3.3V")
-    pump.start_pump_manual()
-    time.sleep(5)
-    print("Switch Off / Low 0V. To end test press enter")
-    pump.stop_pump_manual()
+    while not input():
+        print("Switch On / High 3.3V")
+        pump.start_pump_manual()
+        time.sleep(5)
+        print("Switch Off / Low 0V. To end test press enter")
+        pump.stop_pump_manual()
+        time.sleep(5)
 finally:
     GPIO.cleanup()
