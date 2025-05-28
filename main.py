@@ -182,7 +182,7 @@ moisturesensoruse = data[0]['moisturesensoruse']    #Global Variable fo moisture
 #initialize ADS, encoder, PreWateringCheck and WateringControl Object and Start Thread for the encoder to interupt when Encoder is used
 ads1115 = ADS1115()
 menucontrol = MenuControls()
-menu = Menu()
+#menu = Menu()
 #encoder = RotaryEncoder()
 #encoder.start_thread()
 pump = Pump

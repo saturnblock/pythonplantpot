@@ -2,7 +2,7 @@ import Interfaces
 import main
 import time
 import threading
-from Interfaces import Pump
+#from Interfaces import Pump
 from main import wateringtimer, ads1115, wateringamount, moisturemax
 
 
