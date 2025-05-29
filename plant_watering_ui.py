@@ -193,13 +193,14 @@ class WateringSettingsFrame(BaseMenuFrame):
         self.value_entries = {} # Speichert Entry/Spinbox Widgets
         self.current_editor_frame = None # Frame für die Wertbearbeitung
 
-        settings_data = [
+        # Die settings_data als Instanzvariable speichern, damit sie in get_unit_for_key zugänglich ist
+        self.settings_data = [
             {"label": "1. Gießmenge:", "key": "wateringamount", "unit": "ml", "min": 10, "max": 500, "step": 10},
             {"label": "2. Gießintervall:", "key": "wateringtimer", "unit": "Sekunden", "min": 60, "max": 86400, "step": 3600},
             {"label": "3. Feuchtigkeitssensor:", "key": "moisturesensoruse", "type": "toggle_and_value", "min_moisture": 5, "max_moisture": 100, "step_moisture": 5},
         ]
 
-        for i, setting in enumerate(settings_data):
+        for i, setting in enumerate(self.settings_data): # Hier self.settings_data verwenden
             frame = tk.Frame(self, bg="#2c3e50")
             frame.pack(pady=5, fill="x", padx=50)
 
@@ -233,10 +234,10 @@ class WateringSettingsFrame(BaseMenuFrame):
 
     def get_unit_for_key(self, key):
         """Hilfsfunktion, um die Einheit für einen Schlüssel zu finden."""
-        for item in self.master.frames["watering_settings"].winfo_children(): # Accessing settings data from the frame
-            if hasattr(item, 'cget') and 'text' in item.cget('text'):
-                if "Gießmenge" in item.cget('text') and key == "wateringamount": return "ml"
-                if "Gießintervall" in item.cget('text') and key == "wateringtimer": return "Sekunden"
+        # Direkt aus der settings_data Liste des Frames abrufen
+        for setting in self.settings_data:
+            if setting["key"] == key:
+                return setting.get("unit", "")
         return "" # Standard
 
     def open_editor(self, setting):
