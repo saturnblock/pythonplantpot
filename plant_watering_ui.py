@@ -5,6 +5,7 @@ import time
 import threading
 import os
 import sys
+from datetime import datetime, timedelta
 
 # Importiere die Hardware-Utilities
 # Stelle sicher, dass pi_hardware_utils.py im selben Verzeichnis liegt oder im PYTHONPATH ist
@@ -66,6 +67,9 @@ def save_config():
 
 # --- GUI-Anwendungsklasse ---
 class PlantWateringApp(tk.Tk):
+    # Zeit in Millisekunden, nach der zum Idle-Screen gewechselt wird (z.B. 60000ms = 60 Sekunden)
+    IDLE_TIMEOUT_MS = 60000
+
     def __init__(self, ads_instance, pump_instance, precheck_instance):
         super().__init__()
         self.title("Pflanzenbewässerungssystem")
@@ -90,6 +94,12 @@ class PlantWateringApp(tk.Tk):
 
         self.update_sensor_data() # Sensorwerte initial aktualisieren und Timer starten
 
+        # Idle-Timer-Logik
+        self.idle_timer_id = None
+        self.bind_all('<Any-Key>', self.reset_idle_timer)
+        self.bind_all('<Button-1>', self.reset_idle_timer) # Für Mausklicks/Touch
+        self.reset_idle_timer() # Startet den Timer beim Initialisieren
+
     def create_frames(self):
         """Erstellt alle Haupt-Frames für die Menüansichten."""
         # Hauptmenü-Frame
@@ -104,8 +114,10 @@ class PlantWateringApp(tk.Tk):
         self.frames["confirm_repot"] = ConfirmRepotFrame(self, self)
         self.frames["confirm_repot"].grid(row=0, column=0, sticky="nsew")
 
-        # Die grid_rowconfigure und grid_columnconfigure für das Hauptfenster
-        # wurden in __init__ verschoben, um den Fehler zu beheben.
+        # Idle-Screen Frame
+        self.frames["idle_screen"] = IdleScreenFrame(self, self)
+        self.frames["idle_screen"].grid(row=0, column=0, sticky="nsew")
+
 
     def create_sensor_status_display(self):
         """Erstellt und platziert den Frame für die Sensorstatusanzeige."""
@@ -129,12 +141,20 @@ class PlantWateringApp(tk.Tk):
 
     def show_frame(self, frame_name):
         """Zeigt den angegebenen Frame an und verbirgt alle anderen."""
+        # Wenn wir von einem Frame wechseln, der den Idle-Timer stoppen soll,
+        # setzen wir ihn zurück.
+        if self.current_frame and frame_name != "idle_screen":
+            self.reset_idle_timer()
+
         frame = self.frames[frame_name]
         frame.tkraise()
         self.current_frame = frame
-        # Wenn wir zu einem Einstellungs-Frame wechseln, aktualisiere die Werte
+
+        # Spezifische Aktualisierungen beim Frame-Wechsel
         if frame_name == "watering_settings":
             frame.update_display_values()
+        elif frame_name == "idle_screen":
+            frame.update_idle_data() # Aktualisiere Daten für den Idle-Screen
 
     def update_sensor_data(self):
         """Aktualisiert die Anzeige der Sensorwerte."""
@@ -151,6 +171,10 @@ class PlantWateringApp(tk.Tk):
                 self.remaining_waterings_label.config(text=f"Verbleibende Gießvorgänge: {remaining_waterings:.1f}")
             else:
                 self.remaining_waterings_label.config(text="Gießmenge ist 0, keine Gießvorgänge möglich.")
+
+            # Wenn der aktuelle Frame der Idle-Screen ist, aktualisiere auch dessen Daten
+            if self.current_frame == self.frames["idle_screen"]:
+                self.frames["idle_screen"].update_idle_data()
 
         except Exception as e:
             print(f"Fehler beim Lesen der Sensordaten: {e}")
@@ -181,6 +205,24 @@ class PlantWateringApp(tk.Tk):
         if messagebox.askyesno("Beenden", "Möchten Sie das Programm wirklich beenden?"):
             self.destroy() # Schließt das Tkinter-Fenster
 
+    def reset_idle_timer(self, event=None):
+        """Setzt den Idle-Timer zurück und wechselt ggf. zum Hauptmenü."""
+        if self.idle_timer_id:
+            self.after_cancel(self.idle_timer_id)
+
+        # Wenn wir auf dem Idle-Screen sind und eine Interaktion stattfindet,
+        # gehen wir zurück zum Hauptmenü.
+        if self.current_frame == self.frames["idle_screen"]:
+            self.show_frame("main_menu")
+
+        # Starte den Timer neu
+        self.idle_timer_id = self.after(self.IDLE_TIMEOUT_MS, self.go_to_idle_screen)
+
+    def go_to_idle_screen(self):
+        """Wechselt zum Idle-Screen."""
+        self.show_frame("idle_screen")
+
+
 # --- Frame-Klassen für die Menüs ---
 class BaseMenuFrame(tk.Frame):
     """Basisklasse für Menü-Frames."""
@@ -202,6 +244,8 @@ class MainMenuFrame(BaseMenuFrame):
         tk.Button(self, text="1. Giesseinstellungen", command=lambda: self.controller.show_frame("watering_settings"), **button_style).pack(pady=10)
         tk.Button(self, text="2. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
         tk.Button(self, text="3. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
+        tk.Button(self, text="4. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
+
 
 class WateringSettingsFrame(BaseMenuFrame):
     def create_widgets(self):
@@ -209,7 +253,7 @@ class WateringSettingsFrame(BaseMenuFrame):
 
         self.setting_vars = {} # Speichert StringVar/IntVar für die Anzeige der Werte
         self.value_entries = {} # Speichert Entry/Spinbox Widgets
-        self.current_editor_frame = None # Frame für die Wertbearbeitung
+        # self.current_editor_frame = None # Wird nicht mehr direkt hier verwaltet, da es ein Toplevel ist
 
         # Die settings_data als Instanzvariable speichern, damit sie in get_unit_for_key zugänglich ist
         self.settings_data = [
@@ -259,23 +303,34 @@ class WateringSettingsFrame(BaseMenuFrame):
         return "" # Standard
 
     def open_editor(self, setting):
-        """Öffnet einen Editor für die ausgewählte Einstellung."""
-        if self.current_editor_frame:
-            self.current_editor_frame.destroy()
+        """Öffnet einen Editor für die ausgewählte Einstellung als Toplevel-Fenster."""
+        # Erstelle das Toplevel-Fenster
+        editor_window = SettingEditorFrame(self.controller, setting, self.update_display_values)
+        # Positioniere das Toplevel-Fenster relativ zum Hauptfenster
+        self.controller.update_idletasks() # Stellt sicher, dass Geometriedaten aktuell sind
+        x = self.controller.winfo_x() + (self.controller.winfo_width() // 2) - (editor_window.winfo_width() // 2)
+        y = self.controller.winfo_y() + (self.controller.winfo_height() // 2) - (editor_window.winfo_height() // 2)
+        editor_window.geometry(f"+{x}+{y}")
+        editor_window.grab_set() # Macht das Toplevel-Fenster modal
+        self.controller.wait_window(editor_window) # Wartet, bis das Toplevel-Fenster geschlossen wird
 
-        self.current_editor_frame = SettingEditorFrame(self, self.controller, setting, self.update_display_values)
-        self.current_editor_frame.pack(fill="both", expand=True, pady=10)
 
+# SettingEditorFrame erbt jetzt von tk.Toplevel
+class SettingEditorFrame(tk.Toplevel):
+    """Toplevel-Fenster zum Bearbeiten einzelner Einstellungen."""
+    def __init__(self, controller, setting_data, update_callback):
+        super().__init__(controller) # Parent ist jetzt der Controller (PlantWateringApp)
+        self.title(f"Bearbeite: {setting_data['label'].replace(':', '')}")
+        self.transient(controller) # Macht das Fenster transient zum Hauptfenster
+        self.grab_set() # Macht das Fenster modal
+        self.protocol("WM_DELETE_WINDOW", self.cancel_and_close) # Behandelt das Schließen über den Fenstermanager
 
-class SettingEditorFrame(tk.Frame):
-    """Frame zum Bearbeiten einzelner Einstellungen."""
-    def __init__(self, parent_frame, controller, setting_data, update_callback):
-        super().__init__(parent_frame, bg="#34495e", bd=5, relief="groove")
         self.controller = controller
         self.setting_data = setting_data
         self.update_callback = update_callback
         self.temp_value = tk.IntVar(self) # Temporärer Wert für die Bearbeitung
 
+        self.configure(bg="#34495e", bd=5, relief="groove") # Hintergrund und Rahmen für das Toplevel-Fenster
         self.create_editor_widgets()
 
     def create_editor_widgets(self):
@@ -387,6 +442,70 @@ class ConfirmRepotFrame(BaseMenuFrame):
 
         tk.Button(self, text="Ja", command=self.controller.repot_plant_action, bg="#27ae60", fg="white", **button_style).pack(pady=10)
         tk.Button(self, text="Nein (Zurück)", command=lambda: self.controller.show_frame("main_menu"), bg="#e74c3c", fg="white", **button_style).pack(pady=10)
+
+class IdleScreenFrame(BaseMenuFrame):
+    """Ein Frame, der als 'Idle Screen' dient und wichtige Informationen anzeigt."""
+    def create_widgets(self):
+        self.configure(bg="#1a2b3c") # Dunklerer Hintergrund für den Idle-Screen
+
+        # Uhrzeit
+        self.time_label = tk.Label(self, text="", font=("Inter", 48, "bold"), fg="#ecf0f1", bg="#1a2b3c")
+        self.time_label.pack(pady=20)
+
+        # Wichtige Informationen
+        info_frame = tk.Frame(self, bg="#1a2b3c")
+        info_frame.pack(pady=20)
+
+        self.idle_moisture_label = tk.Label(info_frame, text="Feuchtigkeit: --%", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
+        self.idle_moisture_label.pack(pady=5)
+        self.idle_tank_label = tk.Label(info_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
+        self.idle_tank_label.pack(pady=5)
+        self.idle_next_watering_label = tk.Label(info_frame, text="Nächste Bewässerung in: --", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
+        self.idle_next_watering_label.pack(pady=5)
+
+        # Bindungen für Interaktion (zum Hauptmenü zurückkehren)
+        self.bind("<Button-1>", self.return_to_main_menu) # Mausklick/Touch
+        self.bind("<Any-Key>", self.return_to_main_menu) # Tastendruck
+
+        self.update_idle_data() # Initial Update
+
+    def update_idle_data(self):
+        """Aktualisiert die Daten auf dem Idle-Screen."""
+        # Uhrzeit aktualisieren
+        self.time_label.config(text=datetime.now().strftime("%H:%M:%S"))
+
+        # Sensorwerte aktualisieren (aus dem Controller holen)
+        try:
+            moisture = self.controller.ads1115.moisture_sensor_status()
+            tank_ml = self.controller.ads1115.tank_level_ml()
+            tank_percent = self.controller.ads1115.tank_level()
+
+            self.idle_moisture_label.config(text=f"Feuchtigkeit: {moisture}%")
+            self.idle_tank_label.config(text=f"Tankfüllstand: {tank_ml:.2f} ml ({tank_percent}%)")
+
+            # Schätzung für die nächste Bewässerung
+            watering_interval_s = current_config.get("wateringtimer", DEFAULT_CONFIG["wateringtimer"])
+            if watering_interval_s > 0:
+                # Dies ist eine vereinfachte Schätzung, da das Hauptprogramm den genauen Timer verwaltet.
+                # Eine genauere Zeit würde eine Kommunikation zwischen den Programmen erfordern.
+                next_watering_estimate = timedelta(seconds=watering_interval_s)
+                self.idle_next_watering_label.config(text=f"Nächste Bewässerung ca. alle {watering_interval_s // 3600}h { (watering_interval_s % 3600) // 60}min")
+            else:
+                self.idle_next_watering_label.config(text="Automatische Bewässerung deaktiviert.")
+
+        except Exception as e:
+            print(f"Fehler beim Aktualisieren des Idle-Screens: {e}")
+            self.idle_moisture_label.config(text="Feuchtigkeit: Fehler")
+            self.idle_tank_label.config(text="Tankfüllstand: Fehler")
+            self.idle_next_watering_label.config(text="Nächste Bewässerung: Fehler")
+
+        # Aktualisiere alle 1 Sekunde
+        self.after(1000, self.update_idle_data)
+
+    def return_to_main_menu(self, event=None):
+        """Kehrt zum Hauptmenü zurück bei Interaktion."""
+        self.controller.show_frame("main_menu")
+        self.controller.reset_idle_timer() # Setzt den Idle-Timer im Controller zurück
 
 
 # --- Hauptprogramm-Logik ---

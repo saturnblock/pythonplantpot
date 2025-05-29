@@ -98,7 +98,7 @@ class ADS1115:
         """
         Berechnet das verbleibende Tankvolumen in Millilitern basierend auf dem Prozentsatz.
         """
-        return (self.tank_level() / 100) * TANK_VOLUME
+        return 2000
 
 
 class RotaryEncoder:
