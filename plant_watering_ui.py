@@ -74,21 +74,19 @@ class PlantWateringApp(tk.Tk):
 
         self.ads1115 = ads_instance
         self.pump = pump_instance
-        self.prewatercheck = precheck_instance
+        self.precheck = precheck_instance
 
         self.current_frame = None
         self.frames = {} # Dictionary zum Speichern der Frames
 
-        self.create_frames()
-        self.show_frame("main_menu")
+        # Konfiguriere das Grid für das Hauptfenster
+        self.grid_rowconfigure(0, weight=1) # Zeile für die Haupt-Content-Frames
+        self.grid_rowconfigure(1, weight=0) # Zeile für den Sensorstatus (feste Höhe)
+        self.grid_columnconfigure(0, weight=1)
 
-        # Labels für Sensorstatus
-        self.moisture_label = tk.Label(self, text="Feuchtigkeit: --%", font=("Inter", 16))
-        self.moisture_label.pack(pady=5)
-        self.tank_label = tk.Label(self, text="Tankfüllstand: -- ml (--%)", font=("Inter", 16))
-        self.tank_label.pack(pady=5)
-        self.remaining_waterings_label = tk.Label(self, text="Verbleibende Gießvorgänge: --", font=("Inter", 16))
-        self.remaining_waterings_label.pack(pady=5)
+        self.create_frames()
+        self.create_sensor_status_display() # Neue Methode für Sensor-Labels
+        self.show_frame("main_menu")
 
         self.update_sensor_data() # Sensorwerte initial aktualisieren und Timer starten
 
@@ -106,8 +104,28 @@ class PlantWateringApp(tk.Tk):
         self.frames["confirm_repot"] = ConfirmRepotFrame(self, self)
         self.frames["confirm_repot"].grid(row=0, column=0, sticky="nsew")
 
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        # Die grid_rowconfigure und grid_columnconfigure für das Hauptfenster
+        # wurden in __init__ verschoben, um den Fehler zu beheben.
+
+    def create_sensor_status_display(self):
+        """Erstellt und platziert den Frame für die Sensorstatusanzeige."""
+        self.sensor_status_frame = tk.Frame(self, bg="#34495e", bd=2, relief="groove")
+        # Platziere den Sensorstatus-Frame in der zweiten Reihe (Index 1) des Grids
+        self.sensor_status_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
+
+        # Labels für Sensorstatus - packe sie innerhalb des neuen Frames
+        self.moisture_label = tk.Label(self.sensor_status_frame, text="Feuchtigkeit: --%", font=("Inter", 14), fg="white", bg="#34495e")
+        self.moisture_label.pack(side="left", padx=10, pady=2)
+        self.tank_label = tk.Label(self.sensor_status_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 14), fg="white", bg="#34495e")
+        self.tank_label.pack(side="left", padx=10, pady=2)
+        self.remaining_waterings_label = tk.Label(self.sensor_status_frame, text="Verbleibende Gießvorgänge: --", font=("Inter", 14), fg="white", bg="#34495e")
+        self.remaining_waterings_label.pack(side="left", padx=10, pady=2)
+
+        # Konfiguriere die Spalten im sensor_status_frame, damit sie sich gleichmäßig ausdehnen
+        self.sensor_status_frame.grid_columnconfigure(0, weight=1)
+        self.sensor_status_frame.grid_columnconfigure(1, weight=1)
+        self.sensor_status_frame.grid_columnconfigure(2, weight=1)
+
 
     def show_frame(self, frame_name):
         """Zeigt den angegebenen Frame an und verbirgt alle anderen."""
