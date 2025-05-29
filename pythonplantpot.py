@@ -392,6 +392,7 @@ try:
         time.sleep(5)
         print("Switch Off / Low 0V. To end test press Enter again.")
         pump.stop_pump_manual()
+        time.sleep(5)
         # Check if Enter was pressed. This is a bit tricky with blocking input.
         # For a non-blocking check, you'd need a more complex input handling.
         # For now, the user has to press Enter *after* the cycle to stop.
@@ -405,7 +406,7 @@ try:
             test_running = False # Allow Ctrl+C to stop
         except EOFError: # For environments where input() might get EOF
             test_running = False
-        time.sleep(5)
+
 
     print("Pump manual test finished.")
 
