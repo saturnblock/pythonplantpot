@@ -179,13 +179,13 @@ class PlantWateringApp(tk.Tk):
         # Labels für Sensorstatus - platziere sie innerhalb des neuen Frames mit grid
         # Jedes Label bekommt eine eigene Spalte und dehnt sich gleichmäßig aus
         self.moisture_label = tk.Label(self.sensor_status_frame, text="Feuchtigkeit: --%", font=("Inter", 14), fg="white", bg="#34495e")
-        self.moisture_label.grid(row=0, column=0, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
+        self.moisture_label.grid(row=0, column=0, padx=10, pady=2, sticky="ew") # sticky "ew" for expansion
 
         self.tank_label = tk.Label(self.sensor_status_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 14), fg="white", bg="#34495e")
-        self.tank_label.grid(row=0, column=1, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
+        self.tank_label.grid(row=0, column=1, padx=10, pady=2, sticky="ew") # sticky "ew" for expansion
 
         self.remaining_waterings_label = tk.Label(self.sensor_status_frame, text="Verbleibende Gießvorgänge: --", font=("Inter", 14), fg="white", bg="#34495e")
-        self.remaining_waterings_label.grid(row=0, column=2, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
+        self.remaining_waterings_label.grid(row=0, column=2, padx=10, pady=2, sticky="ew") # sticky "ew" for expansion
 
         # Konfiguriere die Spalten im sensor_status_frame, damit sie sich gleichmäßig ausdehnen
         self.sensor_status_frame.grid_columnconfigure(0, weight=1)
