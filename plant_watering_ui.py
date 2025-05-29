@@ -570,7 +570,7 @@ if __name__ == "__main__":
     # Hardware initialisieren
     ads1115 = ADS1115()
     # Pump-Instanz hier entfernt, da sie vom Hauptsystem verwaltet wird
-    prewatercheck = PreWateringCheck(ads1115)
+    precheck = PreWateringCheck(ads1115) # Hinzugefügt: Initialisierung von precheck
 
     # GUI-Anwendung starten
     app = PlantWateringApp(ads1115, precheck) # Pump-Instanz hier nicht übergeben
