@@ -3,6 +3,7 @@ import time
 import threading
 import sys
 import os # Importiere os für Dateiprüfungen
+import RPi.GPIO as GPIO
 
 # Importiere die Hardware-Utilities
 # Stelle sicher, dass pi_hardware_utils.py im selben Verzeichnis liegt oder im PYTHONPATH ist
