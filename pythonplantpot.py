@@ -365,7 +365,8 @@ try:
     # Start encoder thread early if you want to use it during tests
     encoder.start_thread()
     print("Rotary Encoder thread started. Twist and press the encoder.")
-    while test_running:
+    sensor_test_running = True
+    while sensor_test_running:
         print("\n--- ADS1115 Sensor Readings ---")
         print(f"Value of Channel 0 (Moisture Sensor): {ads1115.get_value('P0')} (Raw ADC)")
         print(f"Moisture Sensor Status: {ads1115.moisture_sensor_status()}%")
@@ -380,12 +381,12 @@ try:
             # Sticking to original input() for simplicity, user will have to press Enter to stop.
             user_input = input("Type stop to stop sensor test, or press Enter to continue to next cycle: ")
             if user_input == "stop": # If user just pressed Enter (empty string)
-                test_running = False
+                sensor_test_running = False
             # If user types something, test_running remains True and loop continues
         except KeyboardInterrupt:
-            test_running = False # Allow Ctrl+C to stop
+            sensor_test_running = False # Allow Ctrl+C to stop
         except EOFError: # For environments where input() might get EOF
-            test_running = False
+            sensor_test_running = False
 
     print("\n--- Rotary Encoder Test ---")
     print("Test the function of the Encoder by twisting and pushing. Press Enter to end this test.")
@@ -397,8 +398,8 @@ try:
     input("Press Enter to start pump test...")
 
     # Loop for manual pump test, will run until user presses Enter again
-    test_running = True
-    while test_running:
+    pump_test_running = True
+    while pump_test_running:
         print("Switch On / High 3.3V")
         pump.start_pump_manual()
         time.sleep(5)
@@ -413,12 +414,12 @@ try:
             # Sticking to original input() for simplicity, user will have to press Enter to stop.
             user_input = input("Press Enter to stop pump test, or type anything and press Enter to continue to next cycle: ")
             if user_input == "": # If user just pressed Enter (empty string)
-                test_running = False
+                pump_test_running = False
             # If user types something, test_running remains True and loop continues
         except KeyboardInterrupt:
-            test_running = False # Allow Ctrl+C to stop
+            pump_test_running = False # Allow Ctrl+C to stop
         except EOFError: # For environments where input() might get EOF
-            test_running = False
+            pump_test_running = False
 
 
     print("Pump manual test finished.")
