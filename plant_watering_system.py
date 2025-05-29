@@ -20,9 +20,9 @@ WATERING_STATUS_FILE = 'watering_status.json'
 
 # Standardwerte für die Pflanzenbewässerung (sollten mit denen in der UI übereinstimmen)
 DEFAULT_CONFIG = {
-    "wateringtimer": 3600,  # in s (1 Stunde)
-    "wateringamount": 50,   # in ml
-    "moisturemax": 30,      # in % (wenn Feuchtigkeit darunter, wird gegossen)
+    "wateringtimer": 60,  # in s (1 Stunde)
+    "wateringamount": 20,   # in ml
+    "moisturemax": 50,      # in % (wenn Feuchtigkeit darunter, wird gegossen)
     "moisturesensoruse": 1  # 1 für aktiv, 0 für inaktiv
 }
 

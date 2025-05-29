@@ -23,9 +23,9 @@ WATERING_STATUS_FILE = 'watering_status.json' # Neue Statusdatei
 
 # Standardwerte für die Pflanzenbewässerung
 DEFAULT_CONFIG = {
-    "wateringtimer": 3600,  # in s (1 Stunde)
-    "wateringamount": 50,   # in ml
-    "moisturemax": 30,      # in % (wenn Feuchtigkeit darunter, wird gegossen)
+    "wateringtimer": 60,  # in s (1 Stunde)
+    "wateringamount": 20,   # in ml
+    "moisturemax": 50,      # in % (wenn Feuchtigkeit darunter, wird gegossen)
     "moisturesensoruse": 1  # 1 für aktiv, 0 für inaktiv
 }
 
@@ -171,16 +171,23 @@ class PlantWateringApp(tk.Tk):
 
 
     def create_sensor_status_display(self):
+        """Erstellt und platziert den Frame für die Sensorstatusanzeige."""
         self.sensor_status_frame = tk.Frame(self, bg="#34495e", bd=2, relief="groove")
+        # Platziere den Sensorstatus-Frame in der zweiten Reihe (Index 1) des Grids
         self.sensor_status_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
+        # Labels für Sensorstatus - platziere sie innerhalb des neuen Frames mit grid
+        # Jedes Label bekommt eine eigene Spalte und dehnt sich gleichmäßig aus
         self.moisture_label = tk.Label(self.sensor_status_frame, text="Feuchtigkeit: --%", font=("Inter", 14), fg="white", bg="#34495e")
-        self.moisture_label.pack(side="left", padx=10, pady=2)
-        self.tank_label = tk.Label(self.sensor_status_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 14), fg="white", bg="#34495e")
-        self.tank_label.pack(side="left", padx=10, pady=2)
-        self.remaining_waterings_label = tk.Label(self.sensor_status_frame, text="Verbleibende Gießvorgänge: --", font=("Inter", 14), fg="white", bg="#34495e")
-        self.remaining_waterings_label.pack(side="left", padx=10, pady=2)
+        self.moisture_label.grid(row=0, column=0, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
 
+        self.tank_label = tk.Label(self.sensor_status_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 14), fg="white", bg="#34495e")
+        self.tank_label.grid(row=0, column=1, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
+
+        self.remaining_waterings_label = tk.Label(self.sensor_status_frame, text="Verbleibende Gießvorgänge: --", font=("Inter", 14), fg="white", bg="#34495e")
+        self.remaining_waterings_label.grid(row=0, column=2, padx=10, pady=2, sticky="w") # sticky "w" for left alignment
+
+        # Konfiguriere die Spalten im sensor_status_frame, damit sie sich gleichmäßig ausdehnen
         self.sensor_status_frame.grid_columnconfigure(0, weight=1)
         self.sensor_status_frame.grid_columnconfigure(1, weight=1)
         self.sensor_status_frame.grid_columnconfigure(2, weight=1)
