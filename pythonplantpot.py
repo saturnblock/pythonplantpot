@@ -365,15 +365,27 @@ try:
     # Start encoder thread early if you want to use it during tests
     encoder.start_thread()
     print("Rotary Encoder thread started. Twist and press the encoder.")
-
-    print("\n--- ADS1115 Sensor Readings ---")
-    print(f"Value of Channel 0 (Moisture Sensor): {ads1115.get_value('P0')} (Raw ADC)")
-    print(f"Moisture Sensor Status: {ads1115.moisture_sensor_status()}%")
-    time.sleep(1)
-    print(f"Value of Channel 1 (Water Tank Sensor): {ads1115.get_value('P1')} (Raw ADC)")
-    print(f"Water Tank Level: {ads1115.tank_level()}%")
-    print(f"Water Tank Level in ml: {ads1115.tank_level_ml():.2f}ml")
-    time.sleep(1)
+    while test_running:
+        print("\n--- ADS1115 Sensor Readings ---")
+        print(f"Value of Channel 0 (Moisture Sensor): {ads1115.get_value('P0')} (Raw ADC)")
+        print(f"Moisture Sensor Status: {ads1115.moisture_sensor_status()}%")
+        time.sleep(1)
+        print(f"Value of Channel 1 (Water Tank Sensor): {ads1115.get_value('P1')} (Raw ADC)")
+        print(f"Water Tank Level: {ads1115.tank_level()}%")
+        print(f"Water Tank Level in ml: {ads1115.tank_level_ml():.2f}ml")
+        time.sleep(1)
+        try:
+            # Use a short timeout for input to make it somewhat non-blocking for the loop
+            # This requires sys and select, which might be overkill for this simple test.
+            # Sticking to original input() for simplicity, user will have to press Enter to stop.
+            user_input = input("Type stop to stop sensor test, or press Enter to continue to next cycle: ")
+            if user_input == "stop": # If user just pressed Enter (empty string)
+                test_running = False
+            # If user types something, test_running remains True and loop continues
+        except KeyboardInterrupt:
+            test_running = False # Allow Ctrl+C to stop
+        except EOFError: # For environments where input() might get EOF
+            test_running = False
 
     print("\n--- Rotary Encoder Test ---")
     print("Test the function of the Encoder by twisting and pushing. Press Enter to end this test.")
@@ -392,7 +404,6 @@ try:
         time.sleep(5)
         print("Switch Off / Low 0V. To end test press Enter again.")
         pump.stop_pump_manual()
-        time.sleep(5)
         # Check if Enter was pressed. This is a bit tricky with blocking input.
         # For a non-blocking check, you'd need a more complex input handling.
         # For now, the user has to press Enter *after* the cycle to stop.
