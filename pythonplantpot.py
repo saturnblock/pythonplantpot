@@ -395,7 +395,7 @@ try:
 
     print("\n--- Pump Manual Test ---")
     print("Now test the Pump switch output. It will oscillate between high and low. Press Enter to end this test.")
-    input("Press Enter to start pump test...")
+    #input("Press Enter to start pump test...")
 
     # Loop for manual pump test, will run until user presses Enter again
     pump_test_running = True
