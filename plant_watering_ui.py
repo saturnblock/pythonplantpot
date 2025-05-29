@@ -6,6 +6,7 @@ import threading
 import os
 import sys
 from datetime import datetime, timedelta
+import RPi.GPIO as GPIO # Hinzugefügt für GPIO.cleanup() im finally-Block
 
 # Importiere die Hardware-Utilities
 # Stelle sicher, dass pi_hardware_utils.py im selben Verzeichnis liegt oder im PYTHONPATH ist
@@ -96,6 +97,7 @@ class PlantWateringApp(tk.Tk):
 
         # Idle-Timer-Logik
         self.idle_timer_id = None
+        # Binde Ereignisse an das Root-Fenster, um Inaktivität zu erkennen
         self.bind_all('<Any-Key>', self.reset_idle_timer)
         self.bind_all('<Button-1>', self.reset_idle_timer) # Für Mausklicks/Touch
         self.reset_idle_timer() # Startet den Timer beim Initialisieren
@@ -141,11 +143,8 @@ class PlantWateringApp(tk.Tk):
 
     def show_frame(self, frame_name):
         """Zeigt den angegebenen Frame an und verbirgt alle anderen."""
-        # Wenn wir von einem Frame wechseln, der den Idle-Timer stoppen soll,
-        # setzen wir ihn zurück.
-        if self.current_frame and frame_name != "idle_screen":
-            self.reset_idle_timer()
-
+        # WICHTIG: Die Zeile, die reset_idle_timer hier aufgerufen hat, wurde entfernt,
+        # um Rekursionen zu vermeiden. reset_idle_timer wird nur durch Events ausgelöst.
         frame = self.frames[frame_name]
         frame.tkraise()
         self.current_frame = frame
@@ -210,9 +209,9 @@ class PlantWateringApp(tk.Tk):
         if self.idle_timer_id:
             self.after_cancel(self.idle_timer_id)
 
-        # Wenn wir auf dem Idle-Screen sind und eine Interaktion stattfindet,
-        # gehen wir zurück zum Hauptmenü.
-        if self.current_frame == self.frames["idle_screen"]:
+        # Nur wenn wir auf dem Idle-Screen sind UND ein Event (Benutzerinteraktion) vorliegt,
+        # wechseln wir zurück zum Hauptmenü. Dies verhindert Rekursion.
+        if self.current_frame == self.frames["idle_screen"] and event is not None:
             self.show_frame("main_menu")
 
         # Starte den Timer neu
@@ -464,8 +463,10 @@ class IdleScreenFrame(BaseMenuFrame):
         self.idle_next_watering_label.pack(pady=5)
 
         # Bindungen für Interaktion (zum Hauptmenü zurückkehren)
-        self.bind("<Button-1>", self.return_to_main_menu) # Mausklick/Touch
-        self.bind("<Any-Key>", self.return_to_main_menu) # Tastendruck
+        # Die Interaktion wird jetzt direkt vom PlantWateringApp Controller über reset_idle_timer behandelt.
+        # Diese Bindungen hier sind redundant, da bind_all im Controller aktiv ist.
+        # self.bind("<Button-1>", self.return_to_main_menu)
+        # self.bind("<Any-Key>", self.return_to_main_menu)
 
         self.update_idle_data() # Initial Update
 
@@ -502,10 +503,13 @@ class IdleScreenFrame(BaseMenuFrame):
         # Aktualisiere alle 1 Sekunde
         self.after(1000, self.update_idle_data)
 
-    def return_to_main_menu(self, event=None):
-        """Kehrt zum Hauptmenü zurück bei Interaktion."""
-        self.controller.show_frame("main_menu")
-        self.controller.reset_idle_timer() # Setzt den Idle-Timer im Controller zurück
+    # Diese Methode wird nicht mehr direkt von den Bindungen des IdleScreenFrame aufgerufen,
+    # sondern die Interaktion wird vom PlantWateringApp.reset_idle_timer behandelt.
+    # Sie kann entfernt werden, da der Controller den Wechsel steuert.
+    # def return_to_main_menu(self, event=None):
+    #     """Kehrt zum Hauptmenü zurück bei Interaktion."""
+    #     self.controller.show_frame("main_menu")
+    #     self.controller.reset_idle_timer() # Setzt den Idle-Timer im Controller zurück
 
 
 # --- Hauptprogramm-Logik ---
@@ -539,5 +543,5 @@ if __name__ == "__main__":
         # Hier könnten noch Aufräumarbeiten für den Drehgeber erfolgen, falls er verwendet wird
         # if 'encoder' in locals() and encoder:
         #     encoder.stop_thread()
-        GPIO.cleanup()
+        GPIO.cleanup() # Sicherstellen, dass GPIO-Pins bereinigt werden
         print("GPIO-Bereinigung abgeschlossen. Programm beendet.")
