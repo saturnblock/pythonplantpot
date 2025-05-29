@@ -2,11 +2,10 @@ import json
 import time
 import threading
 import sys
-import os # Importiere os für Dateiprüfungen
-import RPi.GPIO as GPIO
+import os
+from datetime import datetime, timedelta
 
 # Importiere die Hardware-Utilities
-# Stelle sicher, dass pi_hardware_utils.py im selben Verzeichnis liegt oder im PYTHONPATH ist
 try:
     from pi_hardware_utils import ADS1115, Pump, PreWateringCheck, TANK_VOLUME
 except ImportError:
@@ -14,9 +13,10 @@ except ImportError:
     print("Bitte stellen Sie sicher, dass 'pi_hardware_utils.py' im selben Verzeichnis liegt.")
     sys.exit(1)
 
-# --- Globale Konfiguration und Standardwerte ---
+# --- Globale Konfiguration und Statusdateien ---
 CONFIG_FILE = 'config.json'
-PUMP_COMMAND_FILE = 'pump_command.json' # Neue Datei für manuelle Pumpenbefehle
+PUMP_COMMAND_FILE = 'pump_command.json'
+WATERING_STATUS_FILE = 'watering_status.json'
 
 # Standardwerte für die Pflanzenbewässerung (sollten mit denen in der UI übereinstimmen)
 DEFAULT_CONFIG = {
@@ -26,13 +26,21 @@ DEFAULT_CONFIG = {
     "moisturesensoruse": 1  # 1 für aktiv, 0 für inaktiv
 }
 
-# Globale Variablen, die aus der Konfigurationsdatei geladen werden
+# Globale Variablen für die Konfiguration (aus config.json geladen)
 wateringtimer = DEFAULT_CONFIG["wateringtimer"]
 wateringamount = DEFAULT_CONFIG["wateringamount"]
 moisturemax = DEFAULT_CONFIG["moisturemax"]
 moisturesensoruse = DEFAULT_CONFIG["moisturesensoruse"]
 
-# --- Funktionen zum Laden der Konfiguration ---
+# Globaler Status für die Bewässerung (aus watering_status.json geladen/gespeichert)
+watering_status = {
+    "last_watering_time": None, # Unix-Timestamp der letzten Bewässerung
+    "estimated_next_watering_time": None, # Unix-Timestamp der nächsten geplanten Bewässerung
+    "remaining_watering_cycles": 0, # Anzahl der Gießzyklen, die mit vollem Tank möglich sind
+    "current_timer_remaining_s": 0 # Verbleibende Sekunden des aktuellen Timers
+}
+
+# --- Funktionen zum Laden/Speichern von Konfiguration und Status ---
 def load_config_for_system():
     """Lädt die Konfiguration aus der config.json-Datei für das Hauptsystem."""
     global wateringtimer, wateringamount, moisturemax, moisturesensoruse
@@ -45,16 +53,33 @@ def load_config_for_system():
                 wateringamount = config.get("wateringamount", DEFAULT_CONFIG["wateringamount"])
                 moisturemax = config.get("moisturemax", DEFAULT_CONFIG["moisturemax"])
                 moisturesensoruse = config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"])
-                # print("System-Konfiguration erfolgreich geladen.") # Auskommentiert für weniger Konsolenausgabe
-            else:
-                print(f"{CONFIG_FILE} ist leer oder hat ein unerwartetes Format. Verwende Standardwerte.")
-                # Hier keine Speicherung, da die UI für die Speicherung zuständig ist
-    except FileNotFoundError:
-        print(f"{CONFIG_FILE} nicht gefunden. Verwende Standardwerte.")
-    except json.JSONDecodeError:
-        print(f"{CONFIG_FILE} ist beschädigt. Verwende Standardwerte.")
+            # print("System-Konfiguration erfolgreich geladen.") # Auskommentiert für weniger Konsolenausgabe
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        print(f"Fehler beim Laden von '{CONFIG_FILE}'. Verwende Standardwerte.")
+
+def load_watering_status():
+    """Lädt den Bewässerungsstatus aus der watering_status.json-Datei."""
+    global watering_status
+    try:
+        with open(WATERING_STATUS_FILE, 'r') as f:
+            data = json.load(f)
+            # Überprüfe und aktualisiere nur erwartete Schlüssel
+            for key in watering_status:
+                if key in data:
+                    watering_status[key] = data[key]
+            print("Bewässerungsstatus erfolgreich geladen.")
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        print(f"Fehler beim Laden von '{WATERING_STATUS_FILE}'. Initialisiere Status.")
+        initialize_watering_status()
+
+def save_watering_status():
+    """Speichert den aktuellen Bewässerungsstatus in der watering_status.json-Datei."""
+    try:
+        with open(WATERING_STATUS_FILE, 'w') as f:
+            json.dump(watering_status, f, indent=4)
+        # print("Bewässerungsstatus erfolgreich gespeichert.") # Auskommentiert für weniger Konsolenausgabe
     except Exception as e:
-        print(f"Unerwarteter Fehler beim Laden von {CONFIG_FILE} für das System: {e}. Verwende Standardwerte.")
+        print(f"Fehler beim Speichern des Bewässerungsstatus in '{WATERING_STATUS_FILE}': {e}")
 
 def initialize_pump_command_file():
     """Stellt sicher, dass die pump_command.json-Datei existiert und leer ist."""
@@ -63,7 +88,6 @@ def initialize_pump_command_file():
             json.dump({"action": "none"}, f)
         print(f"'{PUMP_COMMAND_FILE}' erstellt.")
     else:
-        # Sicherstellen, dass der Inhalt gültig ist
         try:
             with open(PUMP_COMMAND_FILE, 'r') as f:
                 data = json.load(f)
@@ -73,6 +97,25 @@ def initialize_pump_command_file():
             print(f"'{PUMP_COMMAND_FILE}' ist beschädigt oder hat ein ungültiges Format. Setze zurück.")
             with open(PUMP_COMMAND_FILE, 'w') as f:
                 json.dump({"action": "none"}, f)
+
+def initialize_watering_status():
+    """Initialisiert den Bewässerungsstatus, insbesondere nach einem Umtopfen oder Start."""
+    global watering_status, wateringamount
+
+    # Lade die aktuelle Konfiguration, um die Gießmenge zu erhalten
+    load_config_for_system()
+
+    # Berechne die initialen Gießzyklen basierend auf dem vollen Tankvolumen
+    if wateringamount > 0:
+        watering_status["remaining_watering_cycles"] = int(TANK_VOLUME / wateringamount)
+    else:
+        watering_status["remaining_watering_cycles"] = 0
+
+    watering_status["last_watering_time"] = time.time() # Setze auf jetzt
+    watering_status["estimated_next_watering_time"] = time.time() + wateringtimer
+    watering_status["current_timer_remaining_s"] = wateringtimer
+    save_watering_status()
+    print("Bewässerungsstatus initialisiert.")
 
 
 class WateringControl:
@@ -84,31 +127,53 @@ class WateringControl:
         self._stop_thread = False
         self.pump = pump_instance
         self.prewatercheck = precheck_instance
-        self.last_watering_time = None # Speichert den Zeitpunkt der letzten Bewässerung
 
     def run_timer_loop(self):
         """
         Die Hauptschleife für die automatische Bewässerung, läuft auf einem Timer.
         """
-        global wateringtimer, wateringamount, moisturemax, moisturesensoruse
+        global wateringtimer, wateringamount, moisturemax, moisturesensoruse, watering_status
 
         # Sicherstellen, dass die neuesten Konfigurationswerte verwendet werden
         load_config_for_system()
 
-        timer = wateringtimer
-        print(f"Automatischer Bewässerungs-Timer gestartet für {timer} Sekunden.")
-        while timer >= 0 and not self._stop_thread:
-            # Überprüfe während des Timers auch auf manuelle Pumpenbefehle
-            self.process_manual_pump_commands()
+        current_timer = wateringtimer # Initialisiere den Timer mit dem konfigurierten Wert
+
+        print(f"Automatischer Bewässerungs-Timer gestartet für {current_timer} Sekunden.")
+        while current_timer >= 0 and not self._stop_thread:
+            # Aktualisiere den verbleibenden Timer-Wert im Status
+            watering_status["current_timer_remaining_s"] = current_timer
+            save_watering_status() # Speichere den Status häufig, damit die GUI ihn lesen kann
+
+            self.process_manual_pump_commands() # Überprüfe auch während des Timers auf manuelle Pumpenbefehle
             time.sleep(1)
-            timer -= 1
-            # print(f"Timer: {timer}s verbleibend") # Auskommentiert für weniger Konsolenausgabe
+            current_timer -= 1
 
         if not self._stop_thread:
             print("Timer abgelaufen. Versuche automatische Bewässerung.")
             # Die Werte für die Vorabprüfung und die Pumpe kommen jetzt aus der globalen Konfiguration
-            self.pump.start_pump_automatic(wateringamount, self.prewatercheck)
-            self.last_watering_time = time.time() # Zeitpunkt der Bewässerung speichern
+
+            # Prüfe, ob noch Gießzyklen übrig sind, bevor tatsächlich versucht wird zu gießen
+            if watering_status["remaining_watering_cycles"] > 0:
+                if self.prewatercheck.water_tank(wateringamount) and \
+                        self.prewatercheck.moisture_sensor(moisturemax, moisturesensoruse):
+
+                    print("Vorabprüfungen bestanden. Starte automatischen Pumpenbetrieb.")
+                    self.pump.pump_timer(wateringamount)
+
+                    # Aktualisiere den Status nach erfolgreichem Gießen
+                    watering_status["last_watering_time"] = time.time()
+                    watering_status["remaining_watering_cycles"] -= 1 # Zähle den Zyklus herunter
+                    print(f"Verbleibende Gießzyklen: {watering_status['remaining_watering_cycles']}")
+                else:
+                    print("Automatische Bewässerung konnte nicht durchgeführt werden (Tank leer oder Boden zu feucht).")
+            else:
+                print("Keine Gießzyklen mehr verfügbar (Tank als leer angenommen).")
+
+            # Unabhängig davon, ob gegossen wurde oder nicht, planen wir die nächste Bewässerung
+            watering_status["estimated_next_watering_time"] = time.time() + wateringtimer
+            save_watering_status() # Speichere den aktualisierten Status
+
             self.run_timer_loop()  # Timer nach der Bewässerung neu starten
         else:
             print("Das automatische Bewässerungsprogramm wurde gestoppt.")
@@ -132,10 +197,15 @@ class WateringControl:
                     json.dump({"action": "none"}, f)
                 print("Manueller Pumpenbefehl ausgeführt und zurückgesetzt.")
 
+            elif command.get("action") == "repot_reset":
+                print("Umtopf-Reset-Befehl empfangen. Initialisiere Gießstatus neu.")
+                initialize_watering_status() # Setzt den Zähler und Timer zurück
+
+                with open(PUMP_COMMAND_FILE, 'w') as f:
+                    json.dump({"action": "none"}, f)
+                print("Umtopf-Reset ausgeführt und Befehl zurückgesetzt.")
+
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            # Dies ist normal, wenn die Datei noch nicht existiert oder leer ist
-            # oder wenn die GUI sie gerade schreibt.
-            # print(f"Kein manueller Pumpenbefehl oder Fehler beim Lesen der Befehlsdatei: {e}")
             pass # Ignoriere Fehler, da die Datei möglicherweise gerade von der GUI geschrieben wird
         except Exception as e:
             print(f"Unerwarteter Fehler beim Verarbeiten manueller Pumpenbefehle: {e}")
@@ -150,6 +220,10 @@ class WateringControl:
 
         if wateringtimer > 0:
             self._stop_thread = False
+            # Initialisiere den Status beim Start des automatischen Programms, falls er nicht gesetzt ist
+            if watering_status["last_watering_time"] is None or watering_status["remaining_watering_cycles"] == 0:
+                initialize_watering_status()
+
             print("Starte automatisches Bewässerungsprogramm...")
             self._timer_thread = threading.Thread(target=self.run_timer_loop, daemon=True)
             self._timer_thread.start()
@@ -169,9 +243,10 @@ class WateringControl:
 
 # --- Hauptteil der Datei ---
 if __name__ == "__main__":
-    # Konfiguration laden
+    # Konfiguration und Status laden/initialisieren
     load_config_for_system()
-    initialize_pump_command_file() # Sicherstellen, dass die Befehlsdatei existiert
+    initialize_pump_command_file()
+    load_watering_status() # Lade den Status beim Start
 
     # Hardware initialisieren
     ads1115 = ADS1115()
@@ -182,6 +257,7 @@ if __name__ == "__main__":
     try:
         print("\n--- Start des Hauptbewässerungssystems ---")
         print(f"Aktuelle Konfiguration: Intervall={wateringtimer}s, Menge={wateringamount}ml, Feuchtigkeit max={moisturemax}%, Sensor aktiv={moisturesensoruse}")
+        print(f"Aktueller Bewässerungsstatus: {watering_status}")
 
         # Starte das automatische Bewässerungsprogramm
         wateringcontrol.start()
@@ -205,5 +281,6 @@ if __name__ == "__main__":
         # Sicherstellen, dass das Bewässerungsprogramm gestoppt wird
         wateringcontrol.stop()
         # GPIO-Pins aufräumen
+        import RPi.GPIO as GPIO # Sicherstellen, dass GPIO hier importiert ist
         GPIO.cleanup()
         print("GPIO-Bereinigung abgeschlossen. Programm beendet.")
