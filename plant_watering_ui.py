@@ -19,6 +19,7 @@ except ImportError:
 
 # --- Globale Konfiguration und Standardwerte ---
 CONFIG_FILE = 'config.json'
+PUMP_COMMAND_FILE = 'pump_command.json' # Datei für manuelle Pumpenbefehle
 
 # Standardwerte für die Pflanzenbewässerung
 DEFAULT_CONFIG = {
@@ -66,19 +67,47 @@ def save_config():
     except Exception as e:
         print(f"Fehler beim Speichern der Konfiguration in {CONFIG_FILE}: {e}")
 
+def send_pump_command(amount_ml):
+    """Sendet einen Befehl an das Hauptsystem, die Pumpe zu starten."""
+    try:
+        with open(PUMP_COMMAND_FILE, 'w') as f:
+            json.dump({"action": "pump_manual", "amount_ml": amount_ml}, f)
+        print(f"Pumpenbefehl '{amount_ml}ml' an '{PUMP_COMMAND_FILE}' gesendet.")
+
+        # Warte, bis der Befehl verarbeitet wurde (Datei wird zurückgesetzt)
+        max_wait_time = 10 # Sekunden
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            try:
+                with open(PUMP_COMMAND_FILE, 'r') as f:
+                    command = json.load(f)
+                if command.get("action") == "none":
+                    print("Pumpenbefehl vom Hauptsystem verarbeitet.")
+                    return True
+            except (FileNotFoundError, json.JSONDecodeError):
+                # Datei könnte gerade geschrieben werden oder noch nicht existieren
+                pass
+            time.sleep(0.1) # Kurze Wartezeit vor dem nächsten Check
+        print("Timeout: Pumpenbefehl wurde möglicherweise nicht verarbeitet.")
+        return False
+    except Exception as e:
+        print(f"Fehler beim Senden des Pumpenbefehls: {e}")
+        return False
+
+
 # --- GUI-Anwendungsklasse ---
 class PlantWateringApp(tk.Tk):
     # Zeit in Millisekunden, nach der zum Idle-Screen gewechselt wird (z.B. 60000ms = 60 Sekunden)
     IDLE_TIMEOUT_MS = 60000
 
-    def __init__(self, ads_instance, pump_instance, precheck_instance):
+    def __init__(self, ads_instance, precheck_instance): # Pump-Instanz hier entfernt
         super().__init__()
         self.title("Pflanzenbewässerungssystem")
         self.geometry("800x480") # Standardgröße für Raspberry Pi Touchscreen
         # self.attributes('-fullscreen', True) # Für Vollbild auf Touchscreen
 
         self.ads1115 = ads_instance
-        self.pump = pump_instance
+        # self.pump = pump_instance # Pump-Instanz hier entfernt
         self.precheck = precheck_instance
 
         self.current_frame = None
@@ -186,18 +215,17 @@ class PlantWateringApp(tk.Tk):
 
     def repot_plant_action(self):
         """Führt die Aktion nach dem Umtopfen aus (z.B. Pumpe einmal starten)."""
-        messagebox.showinfo("Umgetopft", "Pflanze wurde umgetopft!\nStarte Pumpe für einen kurzen Testlauf (50ml)...")
-        # Starte Pumpe in einem separaten Thread, um die GUI nicht zu blockieren
-        threading.Thread(target=self._run_repot_pump_test, daemon=True).start()
+        messagebox.showinfo("Umgetopft", "Pflanze wurde umgetopft!\nSende Befehl zum Starten der Pumpe für einen kurzen Testlauf (50ml)...")
+        # Sende Befehl zum Starten der Pumpe in einem separaten Thread, um die GUI nicht zu blockieren
+        threading.Thread(target=self._send_repot_pump_command, daemon=True).start()
         self.show_frame("main_menu")
 
-    def _run_repot_pump_test(self):
-        """Interner Thread für den Pumpentest nach dem Umtopfen."""
-        try:
-            self.pump.pump_timer(50) # Starte Pumpe für 50ml
-            messagebox.showinfo("Umgetopft", "Testlauf beendet.")
-        except Exception as e:
-            messagebox.showerror("Pumpenfehler", f"Fehler beim Pumpentest: {e}")
+    def _send_repot_pump_command(self):
+        """Interner Thread zum Senden des Pumpenbefehls nach dem Umtopfen."""
+        if send_pump_command(50): # Sende Befehl für 50ml
+            messagebox.showinfo("Umgetopft", "Testlauf-Befehl gesendet und verarbeitet.")
+        else:
+            messagebox.showerror("Pumpenfehler", "Fehler beim Senden oder Verarbeiten des Pumpenbefehls.")
 
     def exit_program(self):
         """Beendet das GUI-Programm."""
@@ -520,11 +548,11 @@ if __name__ == "__main__":
     # Hardware initialisieren
     # Dies sollte nur einmal am Anfang des GUI-Programms geschehen
     ads1115 = ADS1115()
-    pump = Pump()
+    # Pump-Instanz hier entfernt, da sie vom Hauptsystem verwaltet wird
     prewatercheck = PreWateringCheck(ads1115)
 
     # GUI-Anwendung starten
-    app = PlantWateringApp(ads1115, pump, prewatercheck)
+    app = PlantWateringApp(ads1115, prewatercheck) # Pump-Instanz hier nicht übergeben
 
     # Der Drehgeber wird in dieser GUI-Version nicht direkt für die Navigation verwendet,
     # da die Bedienung über Maus/Touchscreen erfolgt.

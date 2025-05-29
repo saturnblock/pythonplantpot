@@ -2,6 +2,7 @@ import json
 import time
 import threading
 import sys
+import os # Importiere os für Dateiprüfungen
 
 # Importiere die Hardware-Utilities
 # Stelle sicher, dass pi_hardware_utils.py im selben Verzeichnis liegt oder im PYTHONPATH ist
@@ -14,6 +15,7 @@ except ImportError:
 
 # --- Globale Konfiguration und Standardwerte ---
 CONFIG_FILE = 'config.json'
+PUMP_COMMAND_FILE = 'pump_command.json' # Neue Datei für manuelle Pumpenbefehle
 
 # Standardwerte für die Pflanzenbewässerung (sollten mit denen in der UI übereinstimmen)
 DEFAULT_CONFIG = {
@@ -42,7 +44,7 @@ def load_config_for_system():
                 wateringamount = config.get("wateringamount", DEFAULT_CONFIG["wateringamount"])
                 moisturemax = config.get("moisturemax", DEFAULT_CONFIG["moisturemax"])
                 moisturesensoruse = config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"])
-                print("System-Konfiguration erfolgreich geladen.")
+                # print("System-Konfiguration erfolgreich geladen.") # Auskommentiert für weniger Konsolenausgabe
             else:
                 print(f"{CONFIG_FILE} ist leer oder hat ein unerwartetes Format. Verwende Standardwerte.")
                 # Hier keine Speicherung, da die UI für die Speicherung zuständig ist
@@ -52,6 +54,25 @@ def load_config_for_system():
         print(f"{CONFIG_FILE} ist beschädigt. Verwende Standardwerte.")
     except Exception as e:
         print(f"Unerwarteter Fehler beim Laden von {CONFIG_FILE} für das System: {e}. Verwende Standardwerte.")
+
+def initialize_pump_command_file():
+    """Stellt sicher, dass die pump_command.json-Datei existiert und leer ist."""
+    if not os.path.exists(PUMP_COMMAND_FILE):
+        with open(PUMP_COMMAND_FILE, 'w') as f:
+            json.dump({"action": "none"}, f)
+        print(f"'{PUMP_COMMAND_FILE}' erstellt.")
+    else:
+        # Sicherstellen, dass der Inhalt gültig ist
+        try:
+            with open(PUMP_COMMAND_FILE, 'r') as f:
+                data = json.load(f)
+                if not isinstance(data, dict) or "action" not in data:
+                    raise ValueError("Ungültiges Format")
+        except (FileNotFoundError, json.JSONDecodeError, ValueError):
+            print(f"'{PUMP_COMMAND_FILE}' ist beschädigt oder hat ein ungültiges Format. Setze zurück.")
+            with open(PUMP_COMMAND_FILE, 'w') as f:
+                json.dump({"action": "none"}, f)
+
 
 class WateringControl:
     """
@@ -76,6 +97,8 @@ class WateringControl:
         timer = wateringtimer
         print(f"Automatischer Bewässerungs-Timer gestartet für {timer} Sekunden.")
         while timer >= 0 and not self._stop_thread:
+            # Überprüfe während des Timers auch auf manuelle Pumpenbefehle
+            self.process_manual_pump_commands()
             time.sleep(1)
             timer -= 1
             # print(f"Timer: {timer}s verbleibend") # Auskommentiert für weniger Konsolenausgabe
@@ -88,6 +111,34 @@ class WateringControl:
             self.run_timer_loop()  # Timer nach der Bewässerung neu starten
         else:
             print("Das automatische Bewässerungsprogramm wurde gestoppt.")
+
+    def process_manual_pump_commands(self):
+        """
+        Überprüft die pump_command.json-Datei auf manuelle Pumpenbefehle und führt sie aus.
+        """
+        try:
+            with open(PUMP_COMMAND_FILE, 'r') as f:
+                command = json.load(f)
+
+            if command.get("action") == "pump_manual":
+                amount_ml = command.get("amount_ml", 0)
+                if amount_ml > 0:
+                    print(f"Manueller Pumpenbefehl empfangen: {amount_ml} ml.")
+                    self.pump.pump_timer(amount_ml)
+
+                # Befehl nach Ausführung zurücksetzen
+                with open(PUMP_COMMAND_FILE, 'w') as f:
+                    json.dump({"action": "none"}, f)
+                print("Manueller Pumpenbefehl ausgeführt und zurückgesetzt.")
+
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            # Dies ist normal, wenn die Datei noch nicht existiert oder leer ist
+            # oder wenn die GUI sie gerade schreibt.
+            # print(f"Kein manueller Pumpenbefehl oder Fehler beim Lesen der Befehlsdatei: {e}")
+            pass # Ignoriere Fehler, da die Datei möglicherweise gerade von der GUI geschrieben wird
+        except Exception as e:
+            print(f"Unerwarteter Fehler beim Verarbeiten manueller Pumpenbefehle: {e}")
+
 
     def start(self):
         """
@@ -117,12 +168,13 @@ class WateringControl:
 
 # --- Hauptteil der Datei ---
 if __name__ == "__main__":
-    # Konfiguration für das System laden
+    # Konfiguration laden
     load_config_for_system()
+    initialize_pump_command_file() # Sicherstellen, dass die Befehlsdatei existiert
 
     # Hardware initialisieren
     ads1115 = ADS1115()
-    pump = Pump()
+    pump = Pump() # Nur hier wird die Pumpe initialisiert
     prewatercheck = PreWateringCheck(ads1115)
     wateringcontrol = WateringControl(pump, prewatercheck)
 
@@ -137,7 +189,10 @@ if __name__ == "__main__":
 
         # Hauptschleife, die das Programm am Laufen hält
         while True:
-            time.sleep(1) # Halte das Hauptprogramm am Laufen
+            # Überprüfe auch im Hauptthread auf manuelle Pumpenbefehle,
+            # falls der Timer-Loop gerade nicht aktiv ist oder für schnelle Reaktionen.
+            wateringcontrol.process_manual_pump_commands()
+            time.sleep(0.5) # Häufiger prüfen für schnellere Reaktion auf manuelle Befehle
 
     except KeyboardInterrupt:
         print("\nProgramm durch Benutzer beendet (Strg+C).")
@@ -149,7 +204,5 @@ if __name__ == "__main__":
         # Sicherstellen, dass das Bewässerungsprogramm gestoppt wird
         wateringcontrol.stop()
         # GPIO-Pins aufräumen
-        # Wenn der Drehgeber im Hauptprogramm verwendet würde, müsste er hier gestoppt werden.
-        # Da er jetzt in der UI-Datei ist, ist das hier nicht mehr nötig.
+        GPIO.cleanup()
         print("GPIO-Bereinigung abgeschlossen. Programm beendet.")
-
