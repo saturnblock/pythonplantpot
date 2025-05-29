@@ -1,3 +1,5 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 import json
 import time
 import threading
@@ -9,8 +11,8 @@ import sys
 try:
     from pi_hardware_utils import ADS1115, RotaryEncoder, Pump, PreWateringCheck, TANK_VOLUME
 except ImportError:
-    print("Fehler: 'pi_hardware_utils.py' konnte nicht gefunden werden.")
-    print("Bitte stellen Sie sicher, dass 'pi_hardware_utils.py' im selben Verzeichnis liegt.")
+    messagebox.showerror("Import Error", "Fehler: 'pi_hardware_utils.py' konnte nicht gefunden werden.\n"
+                                         "Bitte stellen Sie sicher, dass 'pi_hardware_utils.py' im selben Verzeichnis liegt.")
     sys.exit(1)
 
 # --- Globale Konfiguration und Standardwerte ---
@@ -62,220 +64,310 @@ def save_config():
     except Exception as e:
         print(f"Fehler beim Speichern der Konfiguration in {CONFIG_FILE}: {e}")
 
-# --- Menüsystem-Klasse ---
-class MenuSystem:
+# --- GUI-Anwendungsklasse ---
+class PlantWateringApp(tk.Tk):
     def __init__(self, ads_instance, pump_instance, precheck_instance):
+        super().__init__()
+        self.title("Pflanzenbewässerungssystem")
+        self.geometry("800x480") # Standardgröße für Raspberry Pi Touchscreen
+        # self.attributes('-fullscreen', True) # Für Vollbild auf Touchscreen
+
         self.ads1115 = ads_instance
         self.pump = pump_instance
         self.prewatercheck = precheck_instance
-        self.current_menu = 'main'
-        self.selected_item_index = 0
-        self.editing_value = False
-        self.temp_value = 0 # Temporärer Wert beim Bearbeiten
-        self.current_setting_key = None # Welcher Wert gerade bearbeitet wird
 
-        self.menus = {
-            'main': {
-                'title': "HAUPTMENÜ",
-                'items': [
-                    {"name": "1. Giesseinstellungen", "action": lambda: self.set_menu('watering_settings')},
-                    {"name": "2. Ich habe umgetopft!", "action": self.repot_plant},
-                    {"name": "3. Programm beenden", "action": self.exit_program}
-                ]
-            },
-            'watering_settings': {
-                'title': "GIESSEINSTELLUNGEN",
-                'items': [
-                    {"name": "1. Giesmenge", "key": "wateringamount", "unit": "ml", "min": 10, "max": 500, "step": 10},
-                    {"name": "2. Giesintervall", "key": "wateringtimer", "unit": "Sekunden", "min": 60, "max": 86400, "step": 3600}, # 1min to 24h
-                    {"name": "3. Feuchtigkeitssensor", "key": "moisturesensoruse", "type": "toggle_or_value", "min": 0, "max": 100, "step": 5},
-                    {"name": "4. Zurück", "action": lambda: self.set_menu('main')}
-                ]
-            },
-            'confirm_repot': {
-                'title': "UMGETOPFT BESTÄTIGEN",
-                'items': [
-                    {"name": "Ja, ich habe umgetopft!", "action": self.perform_repot_action},
-                    {"name": "Nein, zurück", "action": lambda: self.set_menu('main')}
-                ]
-            }
-        }
-        self.display_menu()
+        self.current_frame = None
+        self.frames = {} # Dictionary zum Speichern der Frames
 
-    def clear_console(self):
-        """Löscht die Konsole für eine saubere Menüanzeige."""
-        os.system('cls' if os.name == 'nt' else 'clear')
+        self.create_frames()
+        self.show_frame("main_menu")
 
-    def display_menu(self):
-        """Zeigt das aktuelle Menü und die Sensorwerte an."""
-        self.clear_console()
-        menu = self.menus[self.current_menu]
-        print(f"--- {menu['title']} ---")
-        print("\n")
+        # Labels für Sensorstatus
+        self.moisture_label = tk.Label(self, text="Feuchtigkeit: --%", font=("Inter", 16))
+        self.moisture_label.pack(pady=5)
+        self.tank_label = tk.Label(self, text="Tankfüllstand: -- ml (--%)", font=("Inter", 16))
+        self.tank_label.pack(pady=5)
+        self.remaining_waterings_label = tk.Label(self, text="Verbleibende Gießvorgänge: --", font=("Inter", 16))
+        self.remaining_waterings_label.pack(pady=5)
 
-        # Anzeige der Sensorwerte und Status im Hauptmenü oder immer
-        # Die Anzeige der Sensorwerte kann hier je nach Menü kontextabhängig gemacht werden.
-        # Für Einfachheit zeigen wir sie immer an.
-        self.display_sensor_status()
-        print("\n")
+        self.update_sensor_data() # Sensorwerte initial aktualisieren und Timer starten
 
-        for i, item in enumerate(menu['items']):
-            prefix = "> " if i == self.selected_item_index else "  "
-            item_name = item['name']
+    def create_frames(self):
+        """Erstellt alle Haupt-Frames für die Menüansichten."""
+        # Hauptmenü-Frame
+        self.frames["main_menu"] = MainMenuFrame(self, self)
+        self.frames["main_menu"].grid(row=0, column=0, sticky="nsew")
 
-            if "key" in item:
-                current_value = current_config.get(item['key'], DEFAULT_CONFIG.get(item['key']))
-                if item['key'] == "moisturesensoruse":
-                    if current_value == 0:
-                        item_name += f" (Aktuell: AUS)"
-                    else:
-                        item_name += f" (Aktuell: {current_config.get('moisturemax', DEFAULT_CONFIG['moisturemax'])}%)"
-                else:
-                    item_name += f" (Aktuell: {current_value} {item.get('unit', '')})"
-            print(f"{prefix}{item_name}")
-        print("\n--------------------")
-        if self.editing_value:
-            print(f"Bearbeite {self.current_setting_key}: {self.temp_value} {self.menus['watering_settings']['items'][self.selected_item_index].get('unit', '')}")
-            print("Drehen zum Anpassen, Drücken zum Bestätigen.")
-        else:
-            print("Drehen zum Navigieren, Drücken zum Auswählen.")
+        # Giesseinstellungen-Frame
+        self.frames["watering_settings"] = WateringSettingsFrame(self, self)
+        self.frames["watering_settings"].grid(row=0, column=0, sticky="nsew")
 
+        # Umtopfen-Bestätigungs-Frame
+        self.frames["confirm_repot"] = ConfirmRepotFrame(self, self)
+        self.frames["confirm_repot"].grid(row=0, column=0, sticky="nsew")
 
-    def display_sensor_status(self):
-        """Zeigt die aktuellen Sensorwerte an."""
-        print("--- AKTUELLE DATEN ---")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+    def show_frame(self, frame_name):
+        """Zeigt den angegebenen Frame an und verbirgt alle anderen."""
+        frame = self.frames[frame_name]
+        frame.tkraise()
+        self.current_frame = frame
+        # Wenn wir zu einem Einstellungs-Frame wechseln, aktualisiere die Werte
+        if frame_name == "watering_settings":
+            frame.update_display_values()
+
+    def update_sensor_data(self):
+        """Aktualisiert die Anzeige der Sensorwerte."""
         try:
             moisture = self.ads1115.moisture_sensor_status()
             tank_ml = self.ads1115.tank_level_ml()
             tank_percent = self.ads1115.tank_level()
-            print(f"Feuchtigkeit: {moisture}%")
-            print(f"Tankfüllstand: {tank_ml:.2f} ml ({tank_percent}%)")
 
-            # Berechnung wann wieder aufgefüllt werden muss (sehr grob)
-            # Annahme: Wasserverbrauch pro Gießvorgang ist wateringamount
-            # Wie viele Gießvorgänge sind noch möglich?
+            self.moisture_label.config(text=f"Feuchtigkeit: {moisture}%")
+            self.tank_label.config(text=f"Tankfüllstand: {tank_ml:.2f} ml ({tank_percent}%)")
+
             if current_config["wateringamount"] > 0:
                 remaining_waterings = tank_ml / current_config["wateringamount"]
-                print(f"Verbleibende Gießvorgänge: {remaining_waterings:.1f}")
+                self.remaining_waterings_label.config(text=f"Verbleibende Gießvorgänge: {remaining_waterings:.1f}")
             else:
-                print("Gießmenge ist 0, keine Gießvorgänge möglich.")
-
-            # Zeit bis zum nächsten Gießen (wenn das Hauptprogramm läuft)
-            # Diese Information kommt normalerweise vom Hauptprogramm, nicht von der UI
-            # Hier nur ein Platzhalter
-            print("Zeit bis zum nächsten Gießen: N/A (vom Hauptprogramm)")
-            print("Zeit seit letztem Gießen: N/A (vom Hauptprogramm)")
+                self.remaining_waterings_label.config(text="Gießmenge ist 0, keine Gießvorgänge möglich.")
 
         except Exception as e:
             print(f"Fehler beim Lesen der Sensordaten: {e}")
-            print("Stellen Sie sicher, dass die Sensoren korrekt angeschlossen sind.")
+            self.moisture_label.config(text="Feuchtigkeit: Fehler")
+            self.tank_label.config(text="Tankfüllstand: Fehler")
+            self.remaining_waterings_label.config(text="Gießvorgänge: Fehler")
 
+        # Aktualisiere alle 5 Sekunden
+        self.after(5000, self.update_sensor_data)
 
-    def navigate(self, direction):
-        """Navigiert im Menü oder passt einen Wert an."""
-        menu_items = self.menus[self.current_menu]['items']
-
-        if self.editing_value:
-            # Wert anpassen
-            item = menu_items[self.selected_item_index]
-            step = item.get("step", 1)
-            min_val = item.get("min", 0)
-            max_val = item.get("max", 100000) # Hoher Max-Wert als Standard
-
-            if direction == 'right':
-                self.temp_value += step
-            else: # 'left'
-                self.temp_value -= step
-
-            # Wertebereich begrenzen
-            self.temp_value = max(min_val, min(max_val, self.temp_value))
-
-            # Spezialfall für Feuchtigkeitssensor: 0 (AUS) oder %-Wert
-            if item['key'] == "moisturesensoruse":
-                if self.temp_value < item.get("min_moisture_value", 5): # Unter einem Schwellenwert auf 0 setzen (AUS)
-                    self.temp_value = 0
-                elif self.temp_value > 0 and self.temp_value < item.get("min_moisture_value", 5):
-                    self.temp_value = item.get("min_moisture_value", 5) # Springt auf min %-Wert wenn über 0
-
-        else:
-            # Menüpunkt auswählen
-            if direction == 'right':
-                self.selected_item_index = (self.selected_item_index + 1) % len(menu_items)
-            else: # 'left'
-                self.selected_item_index = (self.selected_item_index - 1 + len(menu_items)) % len(menu_items)
-        self.display_menu()
-
-    def confirm_selection(self):
-        """Bestätigt die Auswahl im Menü oder einen Wert."""
-        menu_items = self.menus[self.current_menu]['items']
-        selected_item = menu_items[self.selected_item_index]
-
-        if self.editing_value:
-            # Wert bestätigen und speichern
-            key = self.current_setting_key
-            current_config[key] = self.temp_value
-
-            # Spezialfall für Feuchtigkeitssensor: Wenn Wert 0 ist, ist moisturesensoruse = 0, sonst 1
-            if key == "moisturesensoruse":
-                if self.temp_value == 0:
-                    current_config["moisturesensoruse"] = 0
-                else:
-                    current_config["moisturesensoruse"] = 1
-                    current_config["moisturemax"] = self.temp_value # Der Wert ist dann der moisturemax
-
-            save_config()
-            self.editing_value = False
-            self.current_setting_key = None
-            print(f"'{selected_item['name']}' auf {current_config[key]} gespeichert.")
-            time.sleep(1) # Kurze Pause, um die Nachricht zu sehen
-            self.display_menu() # Menü neu anzeigen
-        else:
-            # Menüpunkt auswählen
-            if "action" in selected_item:
-                selected_item['action']()
-            elif "key" in selected_item:
-                # Beginne mit der Bearbeitung des Wertes
-                self.editing_value = True
-                self.current_setting_key = selected_item['key']
-                # Initialisiere temp_value mit dem aktuellen Wert aus der Konfiguration
-                if self.current_setting_key == "moisturesensoruse":
-                    # Wenn moisturesensoruse 0 ist, zeige 0 an, sonst den moisturemax Wert
-                    self.temp_value = current_config.get("moisturemax", DEFAULT_CONFIG["moisturemax"]) \
-                        if current_config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"]) == 1 else 0
-                else:
-                    self.temp_value = current_config.get(self.current_setting_key, DEFAULT_CONFIG.get(self.current_setting_key))
-                self.display_menu() # Menü mit Bearbeitungsmodus neu anzeigen
-
-    def set_menu(self, menu_name):
-        """Wechselt zum angegebenen Menü."""
-        self.current_menu = menu_name
-        self.selected_item_index = 0
-        self.editing_value = False
-        self.display_menu()
-
-    def repot_plant(self):
-        """Aktion für 'Ich habe umgetopft!'."""
-        self.set_menu('confirm_repot') # Gehe zum Bestätigungsmenü
-
-    def perform_repot_action(self):
+    def repot_plant_action(self):
         """Führt die Aktion nach dem Umtopfen aus (z.B. Pumpe einmal starten)."""
-        self.clear_console()
-        print("Pflanze wurde umgetopft!")
-        print("Starte Pumpe für einen kurzen Testlauf (50ml)...")
-        # Hier könnte man die Pumpe manuell für eine kleine Menge starten
-        # oder einen "Reset" des Bewässerungszyklus im Hauptprogramm auslösen.
-        # Für diesen UI-Teil starten wir die Pumpe einmalig.
-        self.pump.pump_timer(50) # Starte Pumpe für 50ml
-        print("Testlauf beendet.")
-        time.sleep(3)
-        self.set_menu('main')
+        messagebox.showinfo("Umgetopft", "Pflanze wurde umgetopft!\nStarte Pumpe für einen kurzen Testlauf (50ml)...")
+        # Starte Pumpe in einem separaten Thread, um die GUI nicht zu blockieren
+        threading.Thread(target=self._run_repot_pump_test, daemon=True).start()
+        self.show_frame("main_menu")
+
+    def _run_repot_pump_test(self):
+        """Interner Thread für den Pumpentest nach dem Umtopfen."""
+        try:
+            self.pump.pump_timer(50) # Starte Pumpe für 50ml
+            messagebox.showinfo("Umgetopft", "Testlauf beendet.")
+        except Exception as e:
+            messagebox.showerror("Pumpenfehler", f"Fehler beim Pumpentest: {e}")
 
     def exit_program(self):
-        """Beendet das UI-Programm."""
-        self.clear_console()
-        print("Programm wird beendet. Auf Wiedersehen!")
-        global running
-        running = False
+        """Beendet das GUI-Programm."""
+        if messagebox.askyesno("Beenden", "Möchten Sie das Programm wirklich beenden?"):
+            self.destroy() # Schließt das Tkinter-Fenster
+
+# --- Frame-Klassen für die Menüs ---
+class BaseMenuFrame(tk.Frame):
+    """Basisklasse für Menü-Frames."""
+    def __init__(self, parent, controller):
+        super().__init__(parent, bg="#2c3e50") # Dunkler Hintergrund
+        self.controller = controller
+        self.create_widgets()
+
+    def create_widgets(self):
+        """Muss von Unterklassen implementiert werden."""
+        raise NotImplementedError
+
+class MainMenuFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="HAUPTMENÜ", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+
+        button_style = {"font": ("Inter", 18), "bg": "#3498db", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
+
+        tk.Button(self, text="1. Giesseinstellungen", command=lambda: self.controller.show_frame("watering_settings"), **button_style).pack(pady=10)
+        tk.Button(self, text="2. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
+        tk.Button(self, text="3. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
+
+class WateringSettingsFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="GIESSEINSTELLUNGEN", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+
+        self.setting_vars = {} # Speichert StringVar/IntVar für die Anzeige der Werte
+        self.value_entries = {} # Speichert Entry/Spinbox Widgets
+        self.current_editor_frame = None # Frame für die Wertbearbeitung
+
+        settings_data = [
+            {"label": "1. Gießmenge:", "key": "wateringamount", "unit": "ml", "min": 10, "max": 500, "step": 10},
+            {"label": "2. Gießintervall:", "key": "wateringtimer", "unit": "Sekunden", "min": 60, "max": 86400, "step": 3600},
+            {"label": "3. Feuchtigkeitssensor:", "key": "moisturesensoruse", "type": "toggle_and_value", "min_moisture": 5, "max_moisture": 100, "step_moisture": 5},
+        ]
+
+        for i, setting in enumerate(settings_data):
+            frame = tk.Frame(self, bg="#2c3e50")
+            frame.pack(pady=5, fill="x", padx=50)
+
+            label = tk.Label(frame, text=setting["label"], font=("Inter", 16), fg="white", bg="#2c3e50", anchor="w")
+            label.pack(side="left", padx=10, fill="x", expand=True)
+
+            var = tk.StringVar(self)
+            self.setting_vars[setting["key"]] = var
+            value_label = tk.Label(frame, textvariable=var, font=("Inter", 16, "bold"), fg="#2ecc71", bg="#2c3e50", width=15, anchor="e")
+            value_label.pack(side="left", padx=10)
+
+            edit_button = tk.Button(frame, text="Bearbeiten", font=("Inter", 14), bg="#f39c12", fg="white",
+                                    command=lambda s=setting: self.open_editor(s))
+            edit_button.pack(side="right", padx=10)
+
+        tk.Button(self, text="Zurück zum Hauptmenü", font=("Inter", 18), bg="#e74c3c", fg="white",
+                  command=lambda: self.controller.show_frame("main_menu"), padx=20, pady=10, relief="raised", bd=3, width=25).pack(pady=20)
+
+        self.update_display_values()
+
+    def update_display_values(self):
+        """Aktualisiert die angezeigten Werte der Einstellungen."""
+        for key, var in self.setting_vars.items():
+            if key == "moisturesensoruse":
+                if current_config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"]) == 0:
+                    var.set("AUS")
+                else:
+                    var.set(f"{current_config.get('moisturemax', DEFAULT_CONFIG['moisturemax'])}%")
+            else:
+                var.set(f"{current_config.get(key, DEFAULT_CONFIG.get(key))} {self.get_unit_for_key(key)}")
+
+    def get_unit_for_key(self, key):
+        """Hilfsfunktion, um die Einheit für einen Schlüssel zu finden."""
+        for item in self.master.frames["watering_settings"].winfo_children(): # Accessing settings data from the frame
+            if hasattr(item, 'cget') and 'text' in item.cget('text'):
+                if "Gießmenge" in item.cget('text') and key == "wateringamount": return "ml"
+                if "Gießintervall" in item.cget('text') and key == "wateringtimer": return "Sekunden"
+        return "" # Standard
+
+    def open_editor(self, setting):
+        """Öffnet einen Editor für die ausgewählte Einstellung."""
+        if self.current_editor_frame:
+            self.current_editor_frame.destroy()
+
+        self.current_editor_frame = SettingEditorFrame(self, self.controller, setting, self.update_display_values)
+        self.current_editor_frame.pack(fill="both", expand=True, pady=10)
+
+
+class SettingEditorFrame(tk.Frame):
+    """Frame zum Bearbeiten einzelner Einstellungen."""
+    def __init__(self, parent_frame, controller, setting_data, update_callback):
+        super().__init__(parent_frame, bg="#34495e", bd=5, relief="groove")
+        self.controller = controller
+        self.setting_data = setting_data
+        self.update_callback = update_callback
+        self.temp_value = tk.IntVar(self) # Temporärer Wert für die Bearbeitung
+
+        self.create_editor_widgets()
+
+    def create_editor_widgets(self):
+        tk.Label(self, text=f"Bearbeite: {self.setting_data['label'].replace(':', '')}", font=("Inter", 20, "bold"), fg="white", bg="#34495e").pack(pady=10)
+
+        # Initialisiere temp_value mit dem aktuellen Wert
+        if self.setting_data['key'] == "moisturesensoruse":
+            # Wenn moisturesensoruse 0 ist, zeige 0 an, sonst den moisturemax Wert
+            initial_val = current_config.get("moisturemax", DEFAULT_CONFIG["moisturemax"]) \
+                if current_config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"]) == 1 else 0
+            self.temp_value.set(initial_val)
+        else:
+            self.temp_value.set(current_config.get(self.setting_data['key'], DEFAULT_CONFIG.get(self.setting_data['key'])))
+
+        # Widget zur Wertanpassung
+        if self.setting_data['key'] == "moisturesensoruse":
+            # Toggle-Button für AN/AUS und Spinbox für %-Wert
+            self.toggle_var = tk.IntVar(self)
+            self.toggle_var.set(current_config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"]))
+
+            toggle_frame = tk.Frame(self, bg="#34495e")
+            toggle_frame.pack(pady=10)
+
+            tk.Checkbutton(toggle_frame, text="Sensor verwenden", variable=self.toggle_var,
+                           font=("Inter", 16), fg="white", bg="#34495e", selectcolor="#2c3e50",
+                           command=self.on_toggle_sensor_use).pack(side="left", padx=10)
+
+            self.moisture_spinbox = tk.Spinbox(toggle_frame, from_=self.setting_data.get("min_moisture", 0),
+                                               to=self.setting_data.get("max_moisture", 100),
+                                               increment=self.setting_data.get("step_moisture", 5),
+                                               textvariable=self.temp_value, font=("Inter", 16), width=5,
+                                               state="normal" if self.toggle_var.get() == 1 else "disabled")
+            self.moisture_spinbox.pack(side="left", padx=10)
+            tk.Label(toggle_frame, text="%", font=("Inter", 16), fg="white", bg="#34495e").pack(side="left")
+
+            # Setze den Wert der Spinbox auf den aktuellen moisturemax, wenn der Sensor aktiv ist
+            if self.toggle_var.get() == 1:
+                self.temp_value.set(current_config.get("moisturemax", DEFAULT_CONFIG["moisturemax"]))
+            else:
+                self.temp_value.set(0) # Wenn Sensor aus, zeige 0 an
+
+
+        else:
+            # Für numerische Werte: +/- Buttons und Anzeige
+            value_frame = tk.Frame(self, bg="#34495e")
+            value_frame.pack(pady=10)
+
+            tk.Button(value_frame, text="<", font=("Inter", 20, "bold"), bg="#e67e22", fg="white",
+                      command=lambda: self.adjust_value(-self.setting_data.get("step", 1)), width=5, height=2).pack(side="left", padx=10)
+
+            tk.Label(value_frame, textvariable=self.temp_value, font=("Inter", 24, "bold"), fg="#ecf0f1", bg="#34495e", width=8).pack(side="left", padx=10)
+            tk.Label(value_frame, text=self.setting_data.get("unit", ""), font=("Inter", 20), fg="white", bg="#34495e").pack(side="left")
+
+            tk.Button(value_frame, text=">", font=("Inter", 20, "bold"), bg="#27ae60", fg="white",
+                      command=lambda: self.adjust_value(self.setting_data.get("step", 1)), width=5, height=2).pack(side="left", padx=10)
+
+        tk.Button(self, text="Bestätigen", font=("Inter", 18), bg="#2980b9", fg="white",
+                  command=self.save_and_close, padx=20, pady=10, relief="raised", bd=3, width=20).pack(pady=20)
+        tk.Button(self, text="Abbrechen", font=("Inter", 18), bg="#c0392b", fg="white",
+                  command=self.cancel_and_close, padx=20, pady=10, relief="raised", bd=3, width=20).pack(pady=10)
+
+    def on_toggle_sensor_use(self):
+        """Behandelt das Umschalten des Feuchtigkeitssensors."""
+        if self.toggle_var.get() == 1: # Sensor ist AN
+            self.moisture_spinbox.config(state="normal")
+            # Setze den Wert auf den aktuellen moisturemax, wenn er 0 war
+            if self.temp_value.get() == 0:
+                self.temp_value.set(current_config.get("moisturemax", DEFAULT_CONFIG["moisturemax"]))
+        else: # Sensor ist AUS
+            self.moisture_spinbox.config(state="disabled")
+            self.temp_value.set(0) # Setze den temporären Wert auf 0
+
+    def adjust_value(self, change):
+        """Passt den Wert der Einstellung an."""
+        new_val = self.temp_value.get() + change
+        min_val = self.setting_data.get("min", 0)
+        max_val = self.setting_data.get("max", 100000)
+
+        # Wertebereich begrenzen
+        new_val = max(min_val, min(max_val, new_val))
+        self.temp_value.set(new_val)
+
+    def save_and_close(self):
+        """Speichert den bearbeiteten Wert und schließt den Editor."""
+        key = self.setting_data['key']
+
+        if key == "moisturesensoruse":
+            current_config["moisturesensoruse"] = self.toggle_var.get()
+            if self.toggle_var.get() == 1: # Wenn Sensor aktiv, speichere den %-Wert als moisturemax
+                current_config["moisturemax"] = self.temp_value.get()
+        else:
+            current_config[key] = self.temp_value.get()
+
+        save_config()
+        messagebox.showinfo("Gespeichert", f"'{self.setting_data['label'].replace(':', '')}' auf {self.temp_value.get()} {self.setting_data.get('unit', '')} gespeichert.")
+        self.update_callback() # Aktualisiere die Anzeige im WateringSettingsFrame
+        self.destroy() # Schließe den Editor-Frame
+
+    def cancel_and_close(self):
+        """Schließt den Editor ohne zu speichern."""
+        self.destroy() # Schließe den Editor-Frame
+
+class ConfirmRepotFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="PFLANZE UMGETOPFT?", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=40)
+        tk.Label(self, text="Möchten Sie bestätigen, dass die Pflanze umgetopft wurde?", font=("Inter", 18), fg="white", bg="#2c3e50").pack(pady=20)
+
+        button_style = {"font": ("Inter", 18), "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 15}
+
+        tk.Button(self, text="Ja", command=self.controller.repot_plant_action, bg="#27ae60", fg="white", **button_style).pack(pady=10)
+        tk.Button(self, text="Nein (Zurück)", command=lambda: self.controller.show_frame("main_menu"), bg="#e74c3c", fg="white", **button_style).pack(pady=10)
 
 
 # --- Hauptprogramm-Logik ---
@@ -284,36 +376,30 @@ if __name__ == "__main__":
     load_config()
 
     # Hardware initialisieren
+    # Dies sollte nur einmal am Anfang des GUI-Programms geschehen
     ads1115 = ADS1115()
     pump = Pump()
     prewatercheck = PreWateringCheck(ads1115)
 
-    # Menüsystem initialisieren
-    menu_system = MenuSystem(ads1115, pump, prewatercheck)
+    # GUI-Anwendung starten
+    app = PlantWateringApp(ads1115, pump, prewatercheck)
 
-    # Drehgeber initialisieren und MenuSystem-Referenz übergeben
-    encoder = RotaryEncoder(menu_system)
+    # Der Drehgeber wird in dieser GUI-Version nicht direkt für die Navigation verwendet,
+    # da die Bedienung über Maus/Touchscreen erfolgt.
+    # Wenn du den Drehgeber zusätzlich zur GUI verwenden möchtest,
+    # müsstest du seine Callbacks an die GUI-Methoden anpassen.
+    # encoder = RotaryEncoder(app) # Hier würde man die App-Instanz übergeben
+    # encoder.start_thread() # Und hier starten
 
-    # Drehgeber-Threads starten
-    encoder.start_thread()
-
-    running = True
     try:
-        while running:
-            # Das Hauptprogramm läuft in einer Schleife, um die UI aktiv zu halten
-            # und auf Drehgeber-Eingaben zu warten (die über Callbacks verarbeitet werden).
-            time.sleep(0.1) # Kurze Pause, um CPU-Auslastung zu reduzieren
-
-    except KeyboardInterrupt:
-        print("\nProgramm durch Benutzer beendet (Ctrl+C).")
+        app.mainloop() # Startet die Tkinter-Event-Schleife
     except Exception as e:
-        print(f"\nEin unerwarteter Fehler ist aufgetreten: {e}")
+        print(f"\nEin Fehler ist während der Ausführung aufgetreten: {e}")
         import traceback
-        traceback.print_exc()
+        traceback.print_exc() # Vollständigen Traceback für Debugging ausgeben
     finally:
-        # GPIO-Pins aufräumen und Drehgeber-Threads stoppen
-        if 'encoder' in locals() and encoder:
-            encoder.stop_thread()
+        # Hier könnten noch Aufräumarbeiten für den Drehgeber erfolgen, falls er verwendet wird
+        # if 'encoder' in locals() and encoder:
+        #     encoder.stop_thread()
         GPIO.cleanup()
         print("GPIO-Bereinigung abgeschlossen. Programm beendet.")
-
