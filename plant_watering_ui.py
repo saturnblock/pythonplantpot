@@ -84,39 +84,40 @@ def load_watering_status_gui():
             for key in watering_status_gui:
                 if key in data:
                     watering_status_gui[key] = data[key]
-            # print("GUI: Bewässerungsstatus erfolgreich geladen.") # Auskommentiert für weniger Konsolenausgabe
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
-        # print("GUI: Bewässerungsstatusdatei nicht gefunden oder beschädigt. Verwende Standardwerte.")
-        # Dies ist normal, wenn das Hauptprogramm noch nicht gelaufen ist oder die Datei noch nicht erstellt hat.
         pass
     except Exception as e:
         print(f"GUI: Unerwarteter Fehler beim Laden des Bewässerungsstatus: {e}")
 
 
-def send_pump_command(amount_ml=None, action="pump_manual"):
-    """Sendet einen Befehl an das Hauptsystem, die Pumpe zu starten oder einen Reset durchzuführen."""
+def send_pump_command(action, amount_ml=None, duration_s=None):
+    """Sendet einen Befehl an das Hauptsystem."""
     try:
         command_data = {"action": action}
         if amount_ml is not None:
             command_data["amount_ml"] = amount_ml
+        if duration_s is not None:
+            command_data["duration_s"] = duration_s
 
         with open(PUMP_COMMAND_FILE, 'w') as f:
             json.dump(command_data, f)
-        print(f"Pumpenbefehl '{action}' mit Menge '{amount_ml}' an '{PUMP_COMMAND_FILE}' gesendet.")
+        print(f"Befehl '{action}' mit Daten {command_data} an '{PUMP_COMMAND_FILE}' gesendet.")
 
         # Warte, bis der Befehl verarbeitet wurde (Datei wird zurückgesetzt)
-        max_wait_time = 10 # Sekunden
+        max_wait_time = 12 # Sekunden (etwas länger als die Pumpzeit)
         start_time = time.time()
         while time.time() - start_time < max_wait_time:
             try:
+                # Kurze Pause, um der anderen Anwendung Zeit zum Lesen zu geben
+                time.sleep(0.2)
                 with open(PUMP_COMMAND_FILE, 'r') as f:
-                    command = json.load(f)
-                if command.get("action") == "none":
-                    print("Pumpenbefehl vom Hauptsystem verarbeitet.")
-                    return True
-            except (FileNotFoundError, json.JSONDecodeError):
-                pass # Datei könnte gerade geschrieben werden oder noch nicht existieren
-            time.sleep(0.1) # Kurze Wartezeit vor dem nächsten Check
+                    content = f.read().strip()
+                    # Wenn die Datei leer ist oder "none" enthält, ist der Befehl verarbeitet.
+                    if not content or json.loads(content).get("action") == "none":
+                        print("Pumpenbefehl vom Hauptsystem verarbeitet.")
+                        return True
+            except (FileNotFoundError, json.JSONDecodeError, ValueError):
+                pass # Versuche es weiter
         print("Timeout: Pumpenbefehl wurde möglicherweise nicht verarbeitet.")
         return False
     except Exception as e:
@@ -131,14 +132,13 @@ class PlantWateringApp(tk.Tk):
     def __init__(self, ads_instance, precheck_instance):
         super().__init__()
         self.title("Pflanzenbewässerungssystem")
-        self.geometry("800x480") # Standardgröße für Raspberry Pi Touchscreen
-        # self.attributes('-fullscreen', True) # Für Vollbild auf Touchscreen
+        self.geometry("800x480")
 
         self.ads1115 = ads_instance
         self.precheck = precheck_instance
 
         self.current_frame = None
-        self.frames = {} # Dictionary zum Speichern der Frames
+        self.frames = {}
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
@@ -148,9 +148,8 @@ class PlantWateringApp(tk.Tk):
         self.create_sensor_status_display()
         self.show_frame("main_menu")
 
-        self.update_sensor_data() # Sensorwerte initial aktualisieren und Timer starten
+        self.update_sensor_data()
 
-        # Idle-Timer-Logik
         self.idle_timer_id = None
         self.bind_all('<Any-Key>', self.reset_idle_timer)
         self.bind_all('<Button-1>', self.reset_idle_timer)
@@ -163,6 +162,10 @@ class PlantWateringApp(tk.Tk):
         self.frames["watering_settings"] = WateringSettingsFrame(self, self)
         self.frames["watering_settings"].grid(row=0, column=0, sticky="nsew")
 
+        # NEU: Frame für manuelle Steuerung
+        self.frames["manual_control"] = ManualControlFrame(self, self)
+        self.frames["manual_control"].grid(row=0, column=0, sticky="nsew")
+
         self.frames["confirm_repot"] = ConfirmRepotFrame(self, self)
         self.frames["confirm_repot"].grid(row=0, column=0, sticky="nsew")
 
@@ -171,23 +174,18 @@ class PlantWateringApp(tk.Tk):
 
 
     def create_sensor_status_display(self):
-        """Erstellt und platziert den Frame für die Sensorstatusanzeige."""
         self.sensor_status_frame = tk.Frame(self, bg="#34495e", bd=2, relief="groove")
-        # Platziere den Sensorstatus-Frame in der zweiten Reihe (Index 1) des Grids
         self.sensor_status_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
-        # Labels für Sensorstatus - platziere sie innerhalb des neuen Frames mit grid
-        # Jedes Label bekommt eine eigene Spalte und dehnt sich gleichmäßig aus
         self.moisture_label = tk.Label(self.sensor_status_frame, text="Feuchtigkeit: --%", font=("Inter", 14), fg="white", bg="#34495e")
-        self.moisture_label.grid(row=0, column=0, padx=2, pady=2, sticky="ew") # Reduziere padx weiter
+        self.moisture_label.grid(row=0, column=0, padx=2, pady=2, sticky="ew")
 
         self.tank_label = tk.Label(self.sensor_status_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 14), fg="white", bg="#34495e")
-        self.tank_label.grid(row=0, column=1, padx=2, pady=2, sticky="ew") # Reduziere padx weiter
+        self.tank_label.grid(row=0, column=1, padx=2, pady=2, sticky="ew")
 
         self.remaining_waterings_label = tk.Label(self.sensor_status_frame, text="Verbleibende Gießvorgänge: --", font=("Inter", 14), fg="white", bg="#34495e")
-        self.remaining_waterings_label.grid(row=0, column=2, padx=2, pady=2, sticky="ew") # Reduziere padx weiter
+        self.remaining_waterings_label.grid(row=0, column=2, padx=2, pady=2, sticky="ew")
 
-        # Konfiguriere die Spalten im sensor_status_frame, damit sie sich gleichmäßig ausdehnen
         self.sensor_status_frame.grid_columnconfigure(0, weight=1)
         self.sensor_status_frame.grid_columnconfigure(1, weight=1)
         self.sensor_status_frame.grid_columnconfigure(2, weight=1)
@@ -204,8 +202,7 @@ class PlantWateringApp(tk.Tk):
             frame.update_idle_data()
 
     def update_sensor_data(self):
-        """Aktualisiert die Anzeige der Sensorwerte und den Bewässerungsstatus."""
-        load_watering_status_gui() # Lade den neuesten Status von der Datei
+        load_watering_status_gui()
 
         try:
             moisture = self.ads1115.moisture_sensor_status()
@@ -214,11 +211,8 @@ class PlantWateringApp(tk.Tk):
 
             self.moisture_label.config(text=f"Feuchtigkeit: {moisture}%")
             self.tank_label.config(text=f"Tankfüllstand: {tank_ml:.2f} ml ({tank_percent}%)")
-
-            # Zeige die verbleibenden Gießvorgänge aus dem Status an
             self.remaining_waterings_label.config(text=f"Verbleibende Gießvorgänge: {watering_status_gui['remaining_watering_cycles']}")
 
-            # Wenn der aktuelle Frame der Idle-Screen ist, aktualisiere auch dessen Daten
             if self.current_frame == self.frames["idle_screen"]:
                 self.frames["idle_screen"].update_idle_data()
 
@@ -228,30 +222,25 @@ class PlantWateringApp(tk.Tk):
             self.tank_label.config(text="Tankfüllstand: Fehler")
             self.remaining_waterings_label.config(text="Gießvorgänge: Fehler")
 
-        self.after(1000, self.update_sensor_data) # Aktualisiere jede Sekunde, um den Idle-Screen flüssig zu halten
+        self.after(1000, self.update_sensor_data)
 
     def repot_plant_action(self):
-        """Sendet den Umtopf-Reset-Befehl an das Hauptsystem."""
         messagebox.showinfo("Umgetopft", "Pflanze wurde umgetopft!\nSende Befehl zum Zurücksetzen des Gießzyklus...")
-        # Sende Befehl zum Zurücksetzen des Gießstatus an das Hauptsystem
         threading.Thread(target=self._send_repot_reset_command, daemon=True).start()
         self.show_frame("main_menu")
 
     def _send_repot_reset_command(self):
-        """Interner Thread zum Senden des Umtopf-Reset-Befehls."""
-        if send_pump_command(action="repot_reset"): # Sende den Reset-Befehl
-            messagebox.showinfo("Umtopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet.")
+        if send_pump_command(action="repot_reset"):
+            self.after(0, lambda: messagebox.showinfo("Umtopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet."))
         else:
-            messagebox.showerror("Fehler", "Fehler beim Senden oder Verarbeiten des Umtopf-Reset-Befehls.")
+            self.after(0, lambda: messagebox.showerror("Fehler", "Fehler beim Senden oder Verarbeiten des Umtopf-Reset-Befehls."))
 
 
     def exit_program(self):
-        """Beendet das GUI-Programm."""
         if messagebox.askyesno("Beenden", "Möchten Sie das Programm wirklich beenden?"):
             self.destroy()
 
     def reset_idle_timer(self, event=None):
-        """Setzt den Idle-Timer zurück und wechselt ggf. zum Hauptmenü."""
         if self.idle_timer_id:
             self.after_cancel(self.idle_timer_id)
 
@@ -261,7 +250,6 @@ class PlantWateringApp(tk.Tk):
         self.idle_timer_id = self.after(self.IDLE_TIMEOUT_MS, self.go_to_idle_screen)
 
     def go_to_idle_screen(self):
-        """Wechselt zum Idle-Screen."""
         self.show_frame("idle_screen")
 
 
@@ -279,10 +267,9 @@ class MainMenuFrame(BaseMenuFrame):
         button_style = {"font": ("Inter", 18), "bg": "#3498db", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
 
         tk.Button(self, text="1. Giesseinstellungen", command=lambda: self.controller.show_frame("watering_settings"), **button_style).pack(pady=10)
-        tk.Button(self, text="2. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
-        tk.Button(self, text="3. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
-        tk.Button(self, text="4. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
-
+        tk.Button(self, text="2. Manuelle Steuerung", command=lambda: self.controller.show_frame("manual_control"), **button_style).pack(pady=10)
+        tk.Button(self, text="3. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
+        tk.Button(self, text="4. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
 
 class WateringSettingsFrame(BaseMenuFrame):
     def create_widgets(self):
@@ -291,7 +278,7 @@ class WateringSettingsFrame(BaseMenuFrame):
         self.setting_vars = {}
         self.settings_data = [
             {"label": "1. Gießmenge:", "key": "wateringamount", "unit": "ml", "min": 10, "max": 500, "step": 10},
-            {"label": "2. Gießintervall:", "key": "wateringtimer", "type": "time_duration", "unit": "s", "min": 60, "max": 86400, "step": 3600}, # Typ hinzugefügt
+            {"label": "2. Gießintervall:", "key": "wateringtimer", "type": "time_duration", "unit": "s", "min": 60, "max": 86400, "step": 3600},
             {"label": "3. Feuchtigkeitssensor:", "key": "moisturesensoruse", "type": "toggle_and_value", "min_moisture": 5, "max_moisture": 100, "step_moisture": 5},
         ]
 
@@ -369,7 +356,7 @@ class SettingEditorFrame(tk.Toplevel):
         if self.setting_data['key'] == "moisturesensoruse":
             self.toggle_var = tk.IntVar(self)
             self.toggle_var.set(current_config.get("moisturesensoruse", DEFAULT_CONFIG["moisturesensoruse"]))
-            self.temp_value = tk.IntVar(self) # Für den %-Wert
+            self.temp_value = tk.IntVar(self)
 
             toggle_frame = tk.Frame(self, bg="#34495e")
             toggle_frame.pack(pady=10)
@@ -392,17 +379,15 @@ class SettingEditorFrame(tk.Toplevel):
                 self.temp_value.set(0)
 
         elif self.setting_data['type'] == "time_duration":
-            # Gießintervall in Tagen, Stunden, Minuten
             total_seconds = current_config.get(self.setting_data['key'], DEFAULT_CONFIG.get(self.setting_data['key']))
             days, remainder = divmod(total_seconds, 86400)
             hours, remainder = divmod(remainder, 3600)
-            minutes, seconds = divmod(remainder, 60) # Sekunden werden nicht direkt angezeigt, aber für die Umrechnung benötigt
+            minutes, _ = divmod(remainder, 60)
 
             self.days_var = tk.IntVar(self, value=int(days))
             self.hours_var = tk.IntVar(self, value=int(hours))
             self.minutes_var = tk.IntVar(self, value=int(minutes))
 
-            # Trace-Variablen, um Änderungen zu erkennen und die Gesamtzeit zu aktualisieren
             self.days_var.trace_add("write", self._update_total_seconds_from_fields)
             self.hours_var.trace_add("write", self._update_total_seconds_from_fields)
             self.minutes_var.trace_add("write", self._update_total_seconds_from_fields)
@@ -410,24 +395,18 @@ class SettingEditorFrame(tk.Toplevel):
             time_frame = tk.Frame(self, bg="#34495e")
             time_frame.pack(pady=10)
 
-            # Tage
             tk.Label(time_frame, text="Tage:", font=("Inter", 16), fg="white", bg="#34495e").grid(row=0, column=0, padx=5, pady=2)
             tk.Spinbox(time_frame, from_=0, to=365, textvariable=self.days_var, font=("Inter", 16), width=5).grid(row=0, column=1, padx=5, pady=2)
-
-            # Stunden
             tk.Label(time_frame, text="Stunden:", font=("Inter", 16), fg="white", bg="#34495e").grid(row=1, column=0, padx=5, pady=2)
             tk.Spinbox(time_frame, from_=0, to=23, textvariable=self.hours_var, font=("Inter", 16), width=5).grid(row=1, column=1, padx=5, pady=2)
-
-            # Minuten
             tk.Label(time_frame, text="Minuten:", font=("Inter", 16), fg="white", bg="#34495e").grid(row=2, column=0, padx=5, pady=2)
             tk.Spinbox(time_frame, from_=0, to=59, textvariable=self.minutes_var, font=("Inter", 16), width=5).grid(row=2, column=1, padx=5, pady=2)
 
             self.total_seconds_label = tk.Label(time_frame, text=f"Gesamt: {total_seconds}s", font=("Inter", 14), fg="#95a5a6", bg="#34495e")
             self.total_seconds_label.grid(row=3, columnspan=2, pady=5)
-            self.temp_value = tk.IntVar(self, value=total_seconds) # Speichert den Gesamtsekundenwert
+            self.temp_value = tk.IntVar(self, value=total_seconds)
 
         else:
-            # Für numerische Werte: +/- Buttons und Anzeige
             self.temp_value = tk.IntVar(self, value=current_config.get(self.setting_data['key'], DEFAULT_CONFIG.get(self.setting_data['key'])))
             value_frame = tk.Frame(self, bg="#34495e")
             value_frame.pack(pady=10)
@@ -447,18 +426,15 @@ class SettingEditorFrame(tk.Toplevel):
                   command=self.cancel_and_close, padx=20, pady=10, relief="raised", bd=3, width=20).pack(pady=10)
 
     def _update_total_seconds_from_fields(self, *args):
-        """Aktualisiert die Gesamtsekunden basierend auf den Tages-, Stunden- und Minutenfeldern."""
         try:
             days = self.days_var.get()
             hours = self.hours_var.get()
             minutes = self.minutes_var.get()
-
             total_seconds = (days * 86400) + (hours * 3600) + (minutes * 60)
             self.temp_value.set(total_seconds)
             self.total_seconds_label.config(text=f"Gesamt: {total_seconds}s")
         except tk.TclError:
-            # Dies kann passieren, wenn die Eingabe ungültig ist (z.B. leeres Feld)
-            pass # Ignoriere für jetzt, da Spinboxen dies verhindern sollten
+            pass
 
     def on_toggle_sensor_use(self):
         if self.toggle_var.get() == 1:
@@ -473,20 +449,17 @@ class SettingEditorFrame(tk.Toplevel):
         new_val = self.temp_value.get() + change
         min_val = self.setting_data.get("min", 0)
         max_val = self.setting_data.get("max", 100000)
-
         new_val = max(min_val, min(max_val, new_val))
         self.temp_value.set(new_val)
 
     def save_and_close(self):
         key = self.setting_data['key']
-
         if key == "moisturesensoruse":
             current_config["moisturesensoruse"] = self.toggle_var.get()
             if self.toggle_var.get() == 1:
                 current_config["moisturemax"] = self.temp_value.get()
         else:
             current_config[key] = self.temp_value.get()
-
         save_config()
         messagebox.showinfo("Gespeichert", f"'{self.setting_data['label'].replace(':', '')}' auf {self.temp_value.get()} {self.setting_data.get('unit', '')} gespeichert.")
         self.update_callback()
@@ -495,26 +468,45 @@ class SettingEditorFrame(tk.Toplevel):
     def cancel_and_close(self):
         self.destroy()
 
+# NEU: Frame für die manuelle Steuerung
+class ManualControlFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="MANUELLE STEUERUNG", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+
+        button_style = {"font": ("Inter", 18), "bg": "#3498db", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
+
+        tk.Button(self, text="Pumpe für 10s starten", command=self.start_pump_10s, **button_style).pack(pady=10)
+
+        tk.Button(self, text="Zurück zum Hauptmenü", font=("Inter", 18), bg="#e74c3c", fg="white",
+                  command=lambda: self.controller.show_frame("main_menu"), padx=20, pady=10, relief="raised", bd=3, width=25).pack(pady=40)
+
+    def start_pump_10s(self):
+        """Sendet den Befehl, die Pumpe für 10 Sekunden laufen zu lassen."""
+        messagebox.showinfo("Pumpe starten", "Sende Befehl, die Pumpe für 10 Sekunden zu starten...")
+        threading.Thread(target=self._send_pump_command_thread, daemon=True).start()
+
+    def _send_pump_command_thread(self):
+        """Wrapper-Funktion, die den Befehl sendet und das Ergebnis im Hauptthread anzeigt."""
+        if send_pump_command(action="pump_timed", duration_s=10):
+            self.controller.after(0, lambda: messagebox.showinfo("Befehl gesendet", "Pumpenbefehl wurde gesendet und verarbeitet."))
+        else:
+            self.controller.after(0, lambda: messagebox.showerror("Fehler", "Timeout: Fehler beim Senden oder Verarbeiten des Pumpenbefehls."))
+
 class ConfirmRepotFrame(BaseMenuFrame):
     def create_widgets(self):
         tk.Label(self, text="PFLANZE UMGETOPFT?", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=40)
         tk.Label(self, text="Möchten Sie bestätigen, dass die Pflanze umgetopft wurde?", font=("Inter", 18), fg="white", bg="#2c3e50").pack(pady=20)
-
         button_style = {"font": ("Inter", 18), "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 15}
-
         tk.Button(self, text="Ja", command=self.controller.repot_plant_action, bg="#27ae60", fg="white", **button_style).pack(pady=10)
         tk.Button(self, text="Nein (Zurück)", command=lambda: self.controller.show_frame("main_menu"), bg="#e74c3c", fg="white", **button_style).pack(pady=10)
 
 class IdleScreenFrame(BaseMenuFrame):
     def create_widgets(self):
         self.configure(bg="#1a2b3c")
-
         self.time_label = tk.Label(self, text="", font=("Inter", 48, "bold"), fg="#ecf0f1", bg="#1a2b3c")
         self.time_label.pack(pady=20)
-
         info_frame = tk.Frame(self, bg="#1a2b3c")
         info_frame.pack(pady=20)
-
         self.idle_moisture_label = tk.Label(info_frame, text="Feuchtigkeit: --%", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
         self.idle_moisture_label.pack(pady=5)
         self.idle_tank_label = tk.Label(info_frame, text="Tankfüllstand: -- ml (--%)", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
@@ -523,81 +515,48 @@ class IdleScreenFrame(BaseMenuFrame):
         self.idle_remaining_cycles_label.pack(pady=5)
         self.idle_next_watering_label = tk.Label(info_frame, text="Nächste Bewässerung in: --", font=("Inter", 20), fg="#95a5a6", bg="#1a2b3c")
         self.idle_next_watering_label.pack(pady=5)
-
         self.update_idle_data()
 
     def update_idle_data(self):
-        # Uhrzeit aktualisieren
         self.time_label.config(text=datetime.now().strftime("%H:%M:%S"))
-
-        # Sensorwerte und Status aus dem Controller holen
         try:
             moisture = self.controller.ads1115.moisture_sensor_status()
             tank_ml = self.controller.ads1115.tank_level_ml()
             tank_percent = self.controller.ads1115.tank_level()
-
             self.idle_moisture_label.config(text=f"Feuchtigkeit: {moisture}%")
             self.idle_tank_label.config(text=f"Tankfüllstand: {tank_ml:.2f} ml ({tank_percent}%)")
-
-            # Lade den neuesten Status aus der Datei
             load_watering_status_gui()
-
-            # Verbleibende Gießzyklen anzeigen
             self.idle_remaining_cycles_label.config(text=f"Verbleibende Gießzyklen: {watering_status_gui['remaining_watering_cycles']}")
-
-            # Verbleibende Zeit bis zur nächsten Bewässerung
             if watering_status_gui["estimated_next_watering_time"] is not None:
                 remaining_s = watering_status_gui["estimated_next_watering_time"] - time.time()
-                if remaining_s < 0:
-                    remaining_s = 0 # Sollte nicht negativ sein, wenn der Timer korrekt läuft
-
+                if remaining_s < 0: remaining_s = 0
                 days, remainder = divmod(int(remaining_s), 86400)
                 hours, remainder = divmod(remainder, 3600)
                 minutes, seconds = divmod(remainder, 60)
-
                 self.idle_next_watering_label.config(text=f"Nächste Bewässerung in: {int(days)}T {int(hours)}h {int(minutes)}m {int(seconds)}s")
             else:
                 self.idle_next_watering_label.config(text="Nächste Bewässerung: Nicht geplant")
-
         except Exception as e:
             print(f"Fehler beim Aktualisieren des Idle-Screens: {e}")
             self.idle_moisture_label.config(text="Feuchtigkeit: Fehler")
             self.idle_tank_label.config(text="Tankfüllstand: Fehler")
             self.idle_remaining_cycles_label.config(text="Verbleibende Gießzyklen: Fehler")
             self.idle_next_watering_label.config(text="Nächste Bewässerung: Fehler")
-
         self.after(1000, self.update_idle_data)
 
 
 # --- Hauptprogramm-Logik ---
 if __name__ == "__main__":
-    # Konfiguration laden
     load_config()
-
-    # Hardware initialisieren
     ads1115 = ADS1115()
-    # Pump-Instanz hier entfernt, da sie vom Hauptsystem verwaltet wird
-    precheck = PreWateringCheck(ads1115) # Hinzugefügt: Initialisierung von precheck
-
-    # GUI-Anwendung starten
-    app = PlantWateringApp(ads1115, precheck) # Pump-Instanz hier nicht übergeben
-
-    # Der Drehgeber wird in dieser GUI-Version nicht direkt für die Navigation verwendet,
-    # da die Bedienung über Maus/Touchscreen erfolgt.
-    # Wenn du den Drehgeber zusätzlich zur GUI verwenden möchtest,
-    # müsstest du seine Callbacks an die GUI-Methoden anpassen.
-    # encoder = RotaryEncoder(app) # Hier würde man die App-Instanz übergeben
-    # encoder.start_thread() # Und hier starten
-
+    precheck = PreWateringCheck(ads1115)
+    app = PlantWateringApp(ads1115, precheck)
     try:
-        app.mainloop() # Startet die Tkinter-Event-Schleife
+        app.mainloop()
     except Exception as e:
         print(f"\nEin Fehler ist während der Ausführung aufgetreten: {e}")
         import traceback
-        traceback.print_exc() # Vollständigen Traceback für Debugging ausgeben
+        traceback.print_exc()
     finally:
-        # Hier könnten noch Aufräumarbeiten für den Drehgeber erfolgen, falls er verwendet wird
-        # if 'encoder' in locals() and encoder:
-        #     encoder.stop_thread()
-        GPIO.cleanup() # Sicherstellen, dass GPIO-Pins bereinigt werden
+        GPIO.cleanup()
         print("GPIO-Bereinigung abgeschlossen. Programm beendet.")
