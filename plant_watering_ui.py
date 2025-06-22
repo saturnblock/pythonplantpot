@@ -163,6 +163,10 @@ class PlantWateringApp(tk.Tk):
         self.frames["watering_settings"] = WateringSettingsFrame(self, self)
         self.frames["watering_settings"].grid(row=0, column=0, sticky="nsew")
 
+        # NEU: Frame für manuelle Bewässerung
+        self.frames["manual_watering"] = ManualWateringFrame(self, self)
+        self.frames["manual_watering"].grid(row=0, column=0, sticky="nsew")
+
         self.frames["confirm_repot"] = ConfirmRepotFrame(self, self)
         self.frames["confirm_repot"].grid(row=0, column=0, sticky="nsew")
 
@@ -240,9 +244,44 @@ class PlantWateringApp(tk.Tk):
     def _send_repot_reset_command(self):
         """Interner Thread zum Senden des Umtopf-Reset-Befehls."""
         if send_pump_command(action="repot_reset"): # Sende den Reset-Befehl
-            messagebox.showinfo("Umtopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet.")
+            messagebox.showinfo("Umgetopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet.")
         else:
             messagebox.showerror("Fehler", "Fehler beim Senden oder Verarbeiten des Umtopf-Reset-Befehls.")
+
+    # NEU: Logik zur Auslösung der manuellen Bewässerung
+    def trigger_manual_watering(self, amount_ml=None):
+        """Löst die manuelle Bewässerung aus, fragt ggf. nach der Menge."""
+        water_amount = 0
+        if amount_ml is None:
+            # Frage nach einer benutzerdefinierten Menge
+            custom_amount = simpledialog.askinteger("Manuelle Bewässerung",
+                                                    "Wie viele ml sollen gegossen werden?",
+                                                    parent=self,
+                                                    minvalue=10,
+                                                    maxvalue=500)
+            if custom_amount is not None:
+                water_amount = custom_amount
+            else:
+                return # Benutzer hat abgebrochen
+        else:
+            # Verwende die Standardmenge
+            water_amount = amount_ml
+
+        if water_amount > 0:
+            # Zeige eine Informationsmeldung, bevor der Thread startet
+            messagebox.showinfo("Befehl wird gesendet", f"Sende Befehl, {water_amount} ml zu gießen...", parent=self)
+            # Starte den Befehl in einem separaten Thread, um die GUI nicht zu blockieren
+            threading.Thread(target=self._send_manual_pump_command, args=(water_amount,), daemon=True).start()
+
+    # NEU: Thread-Funktion zum Senden des manuellen Pumpenbefehls
+    def _send_manual_pump_command(self, amount_ml):
+        """Interner Thread zum Senden des manuellen Pumpenbefehls."""
+        if send_pump_command(amount_ml=amount_ml, action="pump_manual"):
+            # Diese Messagebox erscheint, nachdem der Befehl vom System verarbeitet wurde
+            messagebox.showinfo("Erfolg", f"{amount_ml} ml wurden gegossen.", parent=self)
+        else:
+            # Diese Messagebox erscheint bei einem Timeout oder Fehler
+            messagebox.showerror("Fehler", "Pumpenbefehl konnte nicht verarbeitet werden (Timeout).", parent=self)
 
 
     def exit_program(self):
@@ -279,9 +318,11 @@ class MainMenuFrame(BaseMenuFrame):
         button_style = {"font": ("Inter", 18), "bg": "#3498db", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
 
         tk.Button(self, text="1. Giesseinstellungen", command=lambda: self.controller.show_frame("watering_settings"), **button_style).pack(pady=10)
-        tk.Button(self, text="2. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
-        tk.Button(self, text="3. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
-        tk.Button(self, text="4. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
+        # NEU: Button für manuelle Bewässerung
+        tk.Button(self, text="2. Manuelle Bewässerung", command=lambda: self.controller.show_frame("manual_watering"), **button_style).pack(pady=10)
+        tk.Button(self, text="3. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
+        tk.Button(self, text="4. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
+        tk.Button(self, text="5. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
 
 
 class WateringSettingsFrame(BaseMenuFrame):
@@ -495,6 +536,33 @@ class SettingEditorFrame(tk.Toplevel):
     def cancel_and_close(self):
         self.destroy()
 
+# NEU: Frame für die manuelle Bewässerung
+class ManualWateringFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="MANUELLE BEWÄSSERUNG", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=40)
+
+        info_label = tk.Label(self, text="Starten Sie die Pumpe für eine einmalige Bewässerung.", font=("Inter", 16), fg="white", bg="#2c3e50")
+        info_label.pack(pady=10, padx=20)
+
+        button_style = {"font": ("Inter", 18), "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
+
+        # Button, um mit der Standard-Wassermenge zu gießen
+        standard_amount = current_config.get("wateringamount", DEFAULT_CONFIG["wateringamount"])
+        tk.Button(self, text=f"Standardmenge ({standard_amount} ml)",
+                  command=lambda: self.controller.trigger_manual_watering(standard_amount),
+                  bg="#27ae60", **button_style).pack(pady=10)
+
+        # Button, um eine benutzerdefinierte Menge einzugeben
+        tk.Button(self, text="Benutzerdefinierte Menge",
+                  command=lambda: self.controller.trigger_manual_watering(None),
+                  bg="#f39c12", **button_style).pack(pady=10)
+
+        # Zurück-Button
+        tk.Button(self, text="Zurück zum Hauptmenü",
+                  command=lambda: self.controller.show_frame("main_menu"),
+                  bg="#e74c3c", **button_style).pack(pady=40)
+
+
 class ConfirmRepotFrame(BaseMenuFrame):
     def create_widgets(self):
         tk.Label(self, text="PFLANZE UMGETOPFT?", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=40)
@@ -566,7 +634,7 @@ class IdleScreenFrame(BaseMenuFrame):
             self.idle_remaining_cycles_label.config(text="Verbleibende Gießzyklen: Fehler")
             self.idle_next_watering_label.config(text="Nächste Bewässerung: Fehler")
 
-        self.after(1000, self.update_idle_data)
+        # self.after(1000, self.update_idle_data) # Dieser Aufruf wurde entfernt, um Doppelungen zu vermeiden
 
 
 # --- Hauptprogramm-Logik ---
