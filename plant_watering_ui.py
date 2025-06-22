@@ -20,7 +20,7 @@ except (ImportError, RuntimeError):
 
 # Importiere die Hardware-Utilities
 try:
-    from pi_hardware_utils import ADS1115, Pump, PreWateringCheck, TANK_VOLUME
+    from pi_hardware_utils import ADS1115, TANK_VOLUME
 except ImportError:
     messagebox.showerror("Import Error", "Fehler: 'pi_hardware_utils.py' konnte nicht gefunden werden.\n"
                                          "Bitte stellen Sie sicher, dass 'pi_hardware_utils.py' im selben Verzeichnis liegt.")
@@ -63,7 +63,6 @@ class HardwareMonitor(threading.Thread):
         """Hauptschleife des Threads."""
         while not self.stop_event.is_set():
             try:
-                # Hardware- und Dateizugriffe hier im Hintergrund
                 moisture = self.ads1115.moisture_sensor_status()
                 tank_ml = self.ads1115.tank_level_ml()
                 tank_percent = self.ads1115.tank_level()
@@ -73,9 +72,8 @@ class HardwareMonitor(threading.Thread):
                     with open(WATERING_STATUS_FILE, 'r') as f:
                         status = json.load(f)
                 except (FileNotFoundError, json.JSONDecodeError):
-                    pass # Fehler werden hier ignoriert, GUI zeigt Standard an
+                    pass
 
-                # Daten aktualisieren
                 self.latest_data = {
                     "moisture": moisture,
                     "tank_ml": tank_ml,
@@ -83,33 +81,28 @@ class HardwareMonitor(threading.Thread):
                     "status": status
                 }
 
-                # Sende ein Event an den Hauptthread, um die GUI zu aktualisieren
                 self.controller.event_generate("<<DataUpdated>>", when="tail")
 
             except Exception as e:
                 print(f"Fehler im HardwareMonitor-Thread: {e}")
 
-            time.sleep(1) # Jede Sekunde aktualisieren
+            time.sleep(1)
 
     def stop(self):
-        """Stoppt den Thread."""
         self.stop_event.set()
 
 # --- Funktionen zum Laden/Speichern der Konfiguration ---
 def load_config():
-    """Lädt die Konfiguration aus der config.json-Datei."""
     global current_config
     try:
         with open(CONFIG_FILE, 'r') as f:
             data = json.load(f)
             current_config = data[0] if isinstance(data, list) and data else DEFAULT_CONFIG
     except (FileNotFoundError, json.JSONDecodeError):
-        print(f"Warnung: {CONFIG_FILE} nicht gefunden/beschädigt. Nutze Standardwerte.")
         current_config = DEFAULT_CONFIG
         save_config()
 
 def save_config():
-    """Speichert die aktuelle Konfiguration in der config.json-Datei."""
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump([current_config], f, indent=4)
@@ -118,14 +111,12 @@ def save_config():
         print(f"Fehler beim Speichern der Konfiguration: {e}")
 
 def send_pump_command(action, amount_ml=None, duration_s=None):
-    """Sendet einen Befehl an das Hauptsystem."""
-    # Diese Funktion wird in einem Thread aufgerufen, daher sind blockierende Anrufe ok.
     try:
         command_data = {"action": action, "amount_ml": amount_ml, "duration_s": duration_s}
         with open(PUMP_COMMAND_FILE, 'w') as f:
             json.dump(command_data, f)
 
-        max_wait_time = 15  # Etwas länger warten
+        max_wait_time = 15
         start_time = time.time()
         while time.time() - start_time < max_wait_time:
             time.sleep(0.2)
@@ -149,6 +140,7 @@ class PlantWateringApp(tk.Tk):
         super().__init__()
         self.title("Pflanzenbewässerungssystem")
         self.geometry("800x480")
+        # self.attributes('-fullscreen', True)
 
         self.current_frame = None
         self.frames = {}
@@ -159,19 +151,17 @@ class PlantWateringApp(tk.Tk):
 
         self.create_frames()
         self.create_sensor_status_display()
-        self.show_frame("main_menu")
 
-        # Starte den Hardware-Monitor-Thread
         self.hardware_monitor = HardwareMonitor(self, ads_instance)
         self.hardware_monitor.start()
 
-        # Binde das benutzerdefinierte Event an die Update-Methode
         self.bind("<<DataUpdated>>", self.update_ui_from_monitor)
 
-        # Idle-Timer
         self.idle_timer_id = None
         self.bind_all('<Any-Key>', self.reset_idle_timer)
         self.bind_all('<Button-1>', self.reset_idle_timer)
+
+        self.show_frame("mainmenu") # KORRIGIERT
         self.reset_idle_timer()
 
     def create_frames(self):
@@ -195,14 +185,18 @@ class PlantWateringApp(tk.Tk):
         self.remaining_waterings_label.grid(row=0, column=2, padx=2, pady=2, sticky="ew")
 
     def show_frame(self, frame_name):
+        # KORREKTUR: Sicherstellen, dass der Frame-Name existiert
+        if frame_name not in self.frames:
+            print(f"Fehler: Frame '{frame_name}' nicht gefunden!")
+            return
+
         frame = self.frames[frame_name]
-        frame.tkraise()
         self.current_frame = frame
         if hasattr(frame, 'on_show'):
             frame.on_show()
+        frame.tkraise()
 
     def update_ui_from_monitor(self, event=None):
-        """Aktualisiert die GUI mit den neuesten Daten aus dem Monitor-Thread."""
         data = self.hardware_monitor.latest_data
         status = data.get("status", {})
 
@@ -210,7 +204,6 @@ class PlantWateringApp(tk.Tk):
         self.tank_label.config(text=f"Tank: {data['tank_ml']:.0f}ml ({data['tank_percent']}%)")
         self.remaining_waterings_label.config(text=f"Gießvorgänge: {status.get('remaining_watering_cycles', '--')}")
 
-        # Update den aktiven Frame, falls dieser eine spezielle Update-Methode hat
         if hasattr(self.current_frame, 'update_data'):
             self.current_frame.update_data(data)
 
@@ -222,9 +215,9 @@ class PlantWateringApp(tk.Tk):
     def reset_idle_timer(self, event=None):
         if self.idle_timer_id:
             self.after_cancel(self.idle_timer_id)
-        if self.current_frame == self.frames["idlescreen"]:
-            self.show_frame("mainmenu")
-        self.idle_timer_id = self.after(self.IDLE_TIMEOUT_MS, lambda: self.show_frame("idlescreen"))
+        if self.current_frame == self.frames.get("idlescreen"): # KORRIGIERT
+            self.show_frame("mainmenu") # KORRIGIERT
+        self.idle_timer_id = self.after(self.IDLE_TIMEOUT_MS, lambda: self.show_frame("idlescreen")) # KORRIGIERT
 
 # --- Frame-Klassen ---
 class BaseMenuFrame(tk.Frame):
@@ -297,26 +290,30 @@ class SettingEditorFrame(tk.Toplevel):
         key = self.setting_data['key']
         tk.Label(self, text=self.setting_data['label'], font=("Inter", 20, "bold"), fg="white", bg="#34495e").pack(pady=10)
 
+        content_frame = tk.Frame(self, bg="#34495e")
+        content_frame.pack(pady=10, padx=20)
+
         if key == "moisturesensoruse":
             self.sensor_on = tk.IntVar(value=current_config.get("moisturesensoruse"))
             self.moisture_max = tk.IntVar(value=current_config.get("moisturemax"))
-            tk.Checkbutton(self, text="Sensor aktiv", variable=self.sensor_on, font=("Inter", 16)).pack()
-            tk.Label(self, text="Schwelle (%):", font=("Inter", 16)).pack()
-            tk.Spinbox(self, from_=10, to=90, increment=5, textvariable=self.moisture_max, font=("Inter", 16), width=5).pack()
+            tk.Checkbutton(content_frame, text="Sensor aktiv", variable=self.sensor_on, font=("Inter", 16), fg="white", bg="#34495e", selectcolor="#2c3e50").pack(anchor="w")
+
+            tk.Label(content_frame, text="Schwelle (%):", font=("Inter", 16), fg="white", bg="#34495e").pack(anchor="w", pady=(10,0))
+            tk.Spinbox(content_frame, from_=10, to=90, increment=5, textvariable=self.moisture_max, font=("Inter", 16), width=5).pack(anchor="w")
         elif self.setting_data.get('type') == "time_duration":
             total_seconds = current_config.get(key, 0)
             self.hours = tk.IntVar(value=total_seconds // 3600)
-            tk.Label(self, text="Intervall (Stunden):", font=("Inter", 16)).pack()
-            tk.Spinbox(self, from_=0, to=168, textvariable=self.hours, font=("Inter", 16), width=5).pack()
-        else:
+            tk.Label(content_frame, text="Intervall (Stunden):", font=("Inter", 16), fg="white", bg="#34495e").pack()
+            tk.Spinbox(content_frame, from_=0, to=168, textvariable=self.hours, font=("Inter", 16), width=5).pack()
+        else: # Gießmenge
             self.amount = tk.IntVar(value=current_config.get(key))
-            tk.Label(self, text="Menge (ml):", font=("Inter", 16)).pack()
-            tk.Spinbox(self, from_=10, to=500, increment=10, textvariable=self.amount, font=("Inter", 16), width=5).pack()
+            tk.Label(content_frame, text="Menge (ml):", font=("Inter", 16), fg="white", bg="#34495e").pack()
+            tk.Spinbox(content_frame, from_=10, to=500, increment=10, textvariable=self.amount, font=("Inter", 16), width=5).pack()
 
         btn_frame = tk.Frame(self, bg="#34495e")
         btn_frame.pack(pady=20)
-        tk.Button(btn_frame, text="Bestätigen", command=self.save_and_close).pack(side="left", padx=10)
-        tk.Button(btn_frame, text="Abbrechen", command=self.destroy).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Bestätigen", font=("Inter", 14), command=self.save_and_close).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Abbrechen", font=("Inter", 14), command=self.destroy).pack(side="left", padx=10)
 
     def save_and_close(self):
         key = self.setting_data['key']
@@ -347,9 +344,9 @@ class ManualControlFrame(BaseMenuFrame):
         tk.Button(self, text="Zurück", font=("Inter", 18), bg="#e74c3c", fg="white", command=lambda: self.controller.show_frame("mainmenu")).pack(pady=40)
 
     def start_pump_10s(self):
-        threading.Thread(target=self._send_command_thread, args=("pump_timed", None, 10)).start()
+        threading.Thread(target=self._send_command_thread, args=("pump_timed", None, 10), daemon=True).start()
     def start_pump_ml(self):
-        threading.Thread(target=self._send_command_thread, args=("pump_manual", self.manual_amount_ml.get(), None)).start()
+        threading.Thread(target=self._send_command_thread, args=("pump_manual", self.manual_amount_ml.get(), None), daemon=True).start()
 
     def _send_command_thread(self, action, amount, duration):
         self.controller.after(0, lambda: messagebox.showinfo("Sende...", f"Sende Befehl: {action}"))
@@ -392,7 +389,7 @@ class RepotConfigFrame(BaseMenuFrame):
         current_config["moisturesensoruse"] = self.vars["moisturesensoruse"].get()
         save_config()
         messagebox.showinfo("Gespeichert", "Neue Konfiguration gespeichert.")
-        threading.Thread(target=lambda: send_pump_command("repot_reset")).start()
+        threading.Thread(target=lambda: send_pump_command("repot_reset"), daemon=True).start()
         self.controller.show_frame("mainmenu")
 
 class IdleScreenFrame(BaseMenuFrame):
@@ -411,12 +408,10 @@ class IdleScreenFrame(BaseMenuFrame):
         self.update_time()
 
     def update_time(self):
-        """Aktualisiert nur die Uhrzeit, Daten kommen von woanders."""
         self.time_label.config(text=datetime.now().strftime("%H:%M:%S"))
         self.after(1000, self.update_time)
 
     def update_data(self, data):
-        """Wird vom Controller aufgerufen, um Daten anzuzeigen."""
         status = data.get("status", {})
         self.idle_moisture_label.config(text=f"Feuchtigkeit: {data.get('moisture', '--')}%")
         self.idle_tank_label.config(text=f"Tank: {data.get('tank_ml', 0.0):.0f}ml ({data.get('tank_percent', '--')}%)")
@@ -424,8 +419,7 @@ class IdleScreenFrame(BaseMenuFrame):
         next_time = status.get("estimated_next_watering_time")
         if next_time:
             remaining_s = max(0, next_time - time.time())
-            days, rem = divmod(int(remaining_s), 86400)
-            hours, rem = divmod(rem, 3600)
+            hours, rem = divmod(int(remaining_s), 3600)
             minutes, seconds = divmod(rem, 60)
             self.idle_next_watering_label.config(text=f"Nächstes Gießen in: {hours:02d}:{minutes:02d}:{seconds:02d}")
         else:
@@ -433,13 +427,13 @@ class IdleScreenFrame(BaseMenuFrame):
 
 # --- Hauptprogramm-Logik ---
 if __name__ == "__main__":
-    load_config()
-    ads1115 = ADS1115()
-    app = PlantWateringApp(ads1115)
     try:
+        load_config()
+        ads1115 = ADS1115()
+        app = PlantWateringApp(ads1115)
         app.mainloop()
     except Exception as e:
-        print(f"\nEin Fehler ist aufgetreten: {e}")
+        print(f"\nEin kritischer Fehler ist beim Start aufgetreten: {e}")
         import traceback
         traceback.print_exc()
     finally:
