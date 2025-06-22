@@ -245,9 +245,9 @@ class PlantWateringApp(tk.Tk):
     def _send_repot_reset_command(self):
         """Interner Thread zum Senden des Umtopf-Reset-Befehls."""
         if send_pump_command(action="repot_reset"): # Sende den Reset-Befehl
-            messagebox.showinfo("Umtopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet.")
+            self.controller.after(0, lambda: messagebox.showinfo("Umgetopft", "Gießzyklus-Reset-Befehl gesendet und verarbeitet."))
         else:
-            messagebox.showerror("Fehler", "Fehler beim Senden oder Verarbeiten des Umtopf-Reset-Befehls.")
+            self.controller.after(0, lambda: messagebox.showerror("Fehler", "Fehler beim Senden oder Verarbeiten des Umtopf-Reset-Befehls."))
 
 
     def exit_program(self):
@@ -298,31 +298,43 @@ class ManualPumpFrame(BaseMenuFrame):
 
         button_style = {"font": ("Inter", 18), "bg": "#16a085", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
 
-        tk.Button(self, text="2 Sekunden pumpen", command=lambda: self.start_pump_thread(2), **button_style).pack(pady=10)
-        tk.Button(self, text="5 Sekunden pumpen", command=lambda: self.start_pump_thread(5), **button_style).pack(pady=10)
-        tk.Button(self, text="10 Sekunden pumpen", command=lambda: self.start_pump_thread(10), **button_style).pack(pady=10)
+        tk.Button(self, text="2 Sekunden pumpen", command=lambda: self.initiate_manual_pump(2), **button_style).pack(pady=10)
+        tk.Button(self, text="5 Sekunden pumpen", command=lambda: self.initiate_manual_pump(5), **button_style).pack(pady=10)
+        tk.Button(self, text="10 Sekunden pumpen", command=lambda: self.initiate_manual_pump(10), **button_style).pack(pady=10)
 
         tk.Button(self, text="Zurück zum Hauptmenü", font=("Inter", 18), bg="#e74c3c", fg="white",
                   command=lambda: self.controller.show_frame("main_menu"), padx=20, pady=10, relief="raised", bd=3, width=25).pack(pady=40)
 
-    def start_pump_thread(self, seconds):
-        """Wrapper, um den Pumpenbefehl in einem separaten Thread zu senden und die GUI nicht zu blockieren."""
-        threading.Thread(target=self._send_manual_pump_command, args=(seconds,), daemon=True).start()
-
-    def _send_manual_pump_command(self, seconds):
-        """Berechnet die Wassermenge und sendet den Befehl an das Hauptsystem."""
+    def initiate_manual_pump(self, seconds):
+        """
+        Startet den manuellen Pumpvorgang.
+        Zeigt eine Info-Box im Hauptthread an und startet dann einen Hintergrundthread, um den Befehl zu senden.
+        """
         try:
-            # PUMP_TIME_ONE_ML wird aus pi_hardware_utils importiert
-            if PUMP_TIME_ONE_ML > 0:
-                amount_ml = seconds / PUMP_TIME_ONE_ML
-                messagebox.showinfo("Pumpe gestartet", f"Pumpe wird für {seconds} Sekunden gestartet, um ca. {amount_ml:.1f} ml zu liefern.")
-                if not send_pump_command(amount_ml=amount_ml, action="pump_manual"):
-                    messagebox.showerror("Fehler", "Der manuelle Pumpenbefehl konnte nicht gesendet oder verarbeitet werden.")
-            else:
+            # Berechnung und GUI-Interaktion im Hauptthread
+            if PUMP_TIME_ONE_ML <= 0:
                 messagebox.showerror("Konfigurationsfehler", "PUMP_TIME_ONE_ML ist Null. Menge kann nicht berechnet werden.")
+                return
+
+            amount_ml = seconds / PUMP_TIME_ONE_ML
+            messagebox.showinfo("Pumpe wird gestartet", f"Sende Befehl, die Pumpe für {seconds} Sekunden zu starten (ca. {amount_ml:.1f} ml).")
+
+            # Starten Sie den Hintergrundthread nur für die blockierende send_pump_command-Funktion
+            thread = threading.Thread(target=self._send_command_in_background, args=(amount_ml,), daemon=True)
+            thread.start()
+
         except NameError:
             messagebox.showerror("Importfehler", "Die Konstante 'PUMP_TIME_ONE_ML' konnte nicht geladen werden.\n"
                                                  "Bitte überprüfen Sie die Datei 'pi_hardware_utils.py'.")
+
+    def _send_command_in_background(self, amount_ml):
+        """
+        Diese Funktion läuft im Hintergrundthread und sendet nur den Befehl.
+        Sie enthält KEINE GUI-Aufrufe.
+        """
+        if not send_pump_command(amount_ml=amount_ml, action="pump_manual"):
+            # Rufen Sie die Messagebox sicher über den Hauptthread auf, indem Sie `after` verwenden
+            self.controller.after(0, lambda: messagebox.showerror("Fehler", "Der manuelle Pumpenbefehl konnte nicht gesendet oder verarbeitet werden."))
 
 
 class WateringSettingsFrame(BaseMenuFrame):
@@ -529,7 +541,7 @@ class SettingEditorFrame(tk.Toplevel):
             current_config[key] = self.temp_value.get()
 
         save_config()
-        messagebox.showinfo("Gespeichert", f"'{self.setting_data['label'].replace(':', '')}' auf {self.temp_value.get()} {self.setting_data.get('unit', '')} gespeichert.")
+        self.controller.after(0, lambda: messagebox.showinfo("Gespeichert", f"'{self.setting_data['label'].replace(':', '')}' auf {self.temp_value.get()} {self.setting_data.get('unit', '')} gespeichert."))
         self.update_callback()
         self.destroy()
 
