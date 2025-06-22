@@ -7,6 +7,7 @@ import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import threading
 
+
 # Globale Konstanten für Hardware-Parameter
 # Diese können bei Bedarf in die config.json verschoben werden,
 # wenn sie vom Benutzer konfigurierbar sein sollen.
