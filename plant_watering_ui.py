@@ -10,7 +10,8 @@ import RPi.GPIO as GPIO # Hinzugefügt für GPIO.cleanup() im finally-Block
 
 # Importiere die Hardware-Utilities
 try:
-    from pi_hardware_utils import ADS1115, RotaryEncoder, Pump, PreWateringCheck, TANK_VOLUME
+    # PUMP_TIME_ONE_ML hinzugefügt, um die Wassermenge aus der Pumpdauer zu berechnen
+    from pi_hardware_utils import ADS1115, RotaryEncoder, Pump, PreWateringCheck, TANK_VOLUME, PUMP_TIME_ONE_ML
 except ImportError:
     messagebox.showerror("Import Error", "Fehler: 'pi_hardware_utils.py' konnte nicht gefunden werden.\n"
                                          "Bitte stellen Sie sicher, dass 'pi_hardware_utils.py' im selben Verzeichnis liegt.")
@@ -160,6 +161,10 @@ class PlantWateringApp(tk.Tk):
         self.frames["main_menu"] = MainMenuFrame(self, self)
         self.frames["main_menu"].grid(row=0, column=0, sticky="nsew")
 
+        # NEU: Frame für manuelle Pumpensteuerung hinzufügen
+        self.frames["manual_pump"] = ManualPumpFrame(self, self)
+        self.frames["manual_pump"].grid(row=0, column=0, sticky="nsew")
+
         self.frames["watering_settings"] = WateringSettingsFrame(self, self)
         self.frames["watering_settings"].grid(row=0, column=0, sticky="nsew")
 
@@ -279,9 +284,45 @@ class MainMenuFrame(BaseMenuFrame):
         button_style = {"font": ("Inter", 18), "bg": "#3498db", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
 
         tk.Button(self, text="1. Giesseinstellungen", command=lambda: self.controller.show_frame("watering_settings"), **button_style).pack(pady=10)
-        tk.Button(self, text="2. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
-        tk.Button(self, text="3. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
-        tk.Button(self, text="4. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
+        # NEU: Button für manuelle Steuerung hinzugefügt und Nummerierung angepasst
+        tk.Button(self, text="2. Manuelle Pumpensteuerung", command=lambda: self.controller.show_frame("manual_pump"), **button_style).pack(pady=10)
+        tk.Button(self, text="3. Ich habe umgetopft!", command=lambda: self.controller.show_frame("confirm_repot"), **button_style).pack(pady=10)
+        tk.Button(self, text="4. Programm beenden", command=self.controller.exit_program, **button_style).pack(pady=10)
+        tk.Button(self, text="5. Zum Idle-Screen", command=lambda: self.controller.show_frame("idle_screen"), **button_style).pack(pady=10)
+
+# NEU: Frame-Klasse für die manuelle Pumpensteuerung
+class ManualPumpFrame(BaseMenuFrame):
+    def create_widgets(self):
+        tk.Label(self, text="MANUELLE PUMPENSTEUERUNG", font=("Inter", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+        tk.Label(self, text="Pumpe für eine bestimmte Dauer manuell starten.", font=("Inter", 16), fg="white", bg="#2c3e50").pack(pady=10)
+
+        button_style = {"font": ("Inter", 18), "bg": "#16a085", "fg": "white", "padx": 20, "pady": 10, "relief": "raised", "bd": 3, "width": 25}
+
+        tk.Button(self, text="2 Sekunden pumpen", command=lambda: self.start_pump_thread(2), **button_style).pack(pady=10)
+        tk.Button(self, text="5 Sekunden pumpen", command=lambda: self.start_pump_thread(5), **button_style).pack(pady=10)
+        tk.Button(self, text="10 Sekunden pumpen", command=lambda: self.start_pump_thread(10), **button_style).pack(pady=10)
+
+        tk.Button(self, text="Zurück zum Hauptmenü", font=("Inter", 18), bg="#e74c3c", fg="white",
+                  command=lambda: self.controller.show_frame("main_menu"), padx=20, pady=10, relief="raised", bd=3, width=25).pack(pady=40)
+
+    def start_pump_thread(self, seconds):
+        """Wrapper, um den Pumpenbefehl in einem separaten Thread zu senden und die GUI nicht zu blockieren."""
+        threading.Thread(target=self._send_manual_pump_command, args=(seconds,), daemon=True).start()
+
+    def _send_manual_pump_command(self, seconds):
+        """Berechnet die Wassermenge und sendet den Befehl an das Hauptsystem."""
+        try:
+            # PUMP_TIME_ONE_ML wird aus pi_hardware_utils importiert
+            if PUMP_TIME_ONE_ML > 0:
+                amount_ml = seconds / PUMP_TIME_ONE_ML
+                messagebox.showinfo("Pumpe gestartet", f"Pumpe wird für {seconds} Sekunden gestartet, um ca. {amount_ml:.1f} ml zu liefern.")
+                if not send_pump_command(amount_ml=amount_ml, action="pump_manual"):
+                    messagebox.showerror("Fehler", "Der manuelle Pumpenbefehl konnte nicht gesendet oder verarbeitet werden.")
+            else:
+                messagebox.showerror("Konfigurationsfehler", "PUMP_TIME_ONE_ML ist Null. Menge kann nicht berechnet werden.")
+        except NameError:
+            messagebox.showerror("Importfehler", "Die Konstante 'PUMP_TIME_ONE_ML' konnte nicht geladen werden.\n"
+                                                 "Bitte überprüfen Sie die Datei 'pi_hardware_utils.py'.")
 
 
 class WateringSettingsFrame(BaseMenuFrame):
